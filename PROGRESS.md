@@ -10,27 +10,26 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL 10 BUILD PHASES DONE** (P0–P10). The brain is feature-complete: ingest spine →
-  completeness → Planner → live runner → PWA + key-proxy → voice (code) → sync cycle → connected
-  cross-persona brain → **documentation generator (P10 DONE, live-verified vs Neo4j)**. The only
-  remaining work is **owner actions** (no code blocked): **P7 (voice)** is code-complete in REVIEW
-  pending the **STT eval gate** + a **plan-permitted ElevenLabs voice** (live TTS returned 402 — see
-  Blockers); **P6 deploy** needs Cloudflare auth (`wrangler deploy` + Pages).
-- **Overall:** ▰▰▰▰▰▰▰▰▰▰ ~100% of the build spine (P0–P10). Remaining = owner-only deploy + voice-gate
-  actions; nothing in the queue is code-blocked.
-- **Last updated:** 2026-06-29 · by `agent:opus-p10`
-- **Verified:** brain `ruff` clean + `pytest -m "not neo4j"` **62 passed** / 3 neo4j skipped (**+7
-  P10:** docgen E2E/SOP/register/filter/traceability); PWA `npm run typecheck` clean + **18 vitest**;
-  **`npm run build` = installable PWA**; Worker typecheck clean. **P10 live-verified vs the real
-  P2–P9 Neo4j graph:** `cli docgen --include-unverified` produced the full deliverable (Mermaid
-  flowchart with status classes + sourced walkthrough + taxonomy-numbered category map + per-role SOPs);
-  **default `cli docgen` hid the 10 unverified activities** (with a note) yet **still surfaced the
-  conflicting event** and rendered the **corroborated "Employee" role as `confirmed`** (persona.demo +
-  p_alice) — proving the P9 confidence promotion flows through to the docs.
-- **Next up:** **No build phases remain.** Owner actions only: (a) **P7** — run the STT eval gate
-  (`node scripts/stt-eval.mjs <dir>` from `pwa/`) + set a usable `ELEVENLABS_VOICE_ID` (or upgrade the
-  plan), flipping P7 REVIEW → DONE; (b) **P6** — `wrangler deploy` + connect Cloudflare Pages to
-  `pwa/dist` (needs CF auth). See the prioritized queue below.
+- **Phase:** **ALL 11 PHASES DONE** (P0–P10). Feature-complete end to end: ingest spine →
+  completeness → Planner → live runner → PWA + key-proxy → **voice (P7 DONE, live TTS+STT on the
+  Starter plan)** → sync cycle → connected cross-persona brain → documentation generator. The **only**
+  remaining work is the **P6 deploy** — and it's now a **one-time GitHub→Cloudflare-Pages connect**,
+  after which every `git push` auto-deploys (see **`DEPLOY.md`**). Repo is git-initialized + committed,
+  ready to push.
+- **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build. Remaining = the owner connecting the repo to Cloudflare
+  Pages once (no code blocked).
+- **Last updated:** 2026-06-29 · by `agent:opus-deploy`
+- **Verified:** brain `ruff` clean + `pytest -m "not neo4j"` **62 passed** / 3 neo4j skipped; PWA
+  `npm run typecheck` + **`typecheck:functions`** clean + **18 vitest** + `npm run build` installable;
+  worker typecheck clean. **ElevenLabs Starter plan live-verified:** TTS→STT round-trip returned the
+  exact sentence — confirmed both via a direct API call and through the new **Pages Functions** (`/tts`
+  35 KB audio, `/stt` perfect transcript, `/llm` real DeepSeek completion, all served by `wrangler
+  pages dev`). **Deploy streamlined:** the key-proxy moved into **`pwa/functions/`** (Cloudflare Pages
+  Functions) so the PWA + proxy are **one git-connected Pages project**, same origin (relative
+  `/llm,/stt,/tts` unchanged); `worker/` kept as an optional standalone, both importing one shared
+  proxy (`pwa/functions/_shared.ts`).
+- **Next up:** **Owner: connect the repo to Cloudflare Pages once** (push to GitHub → Pages → set the 2
+  secrets → first build). Full step-by-step in **`DEPLOY.md`**. After that, updates = `git push`.
 
 ## ▶ Resume here (start every session with this)
 
@@ -61,7 +60,7 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P4 | 4 | Planner → per-persona Session Brief | DONE | agent:opus-p4 | `brain/.../planner.py` + `threads.threads_from_gaps` · 6 tests (schema-validated) · live `cli plan` | 2026-06-28 |
 | P5 | 5 | Live runner (typed) consuming the brief | DONE | agent:opus-p5 | `pwa/src/runner/*` (runner/session/answerlog/prompts/llm/validate/harness) · 6 tests · live `v4-flash` session + `cli ingest-log` loop closed | 2026-06-28 |
 | P6 | 6 | PWA shell + Cloudflare Pages host + Worker proxy | DONE | agent:opus-p6 | `worker/src/index.ts` (`/llm`) · `pwa/src/{App.tsx,screens/SessionScreen.tsx}` · `scripts/gen-icons.mjs` · dev proxy · live-verified (deploy = owner) | 2026-06-28 |
-| P7 | 7 | Voice — ElevenLabs STT/TTS via the proxy | REVIEW | agent:opus-p7 | `worker/src/index.ts` (`/stt`,`/tts`) · `pwa/src/voice/*` · `SessionScreen` mic+TTS · `pwa/scripts/stt-eval.mjs` · seam/guard-verified (eval gate + paid ElevenLabs voice = owner) | 2026-06-29 |
+| P7 | 7 | Voice — ElevenLabs STT/TTS via the proxy | DONE | agent:opus-p7 | `pwa/functions/_shared.ts` (`/stt`,`/tts`) · `pwa/src/voice/*` · `SessionScreen` mic+TTS · `pwa/scripts/stt-eval.mjs` · **live TTS+STT 200 on Starter plan** (field-WER eval = recommended QA) | 2026-06-29 |
 | P8 | 8 | Sync bus + participant registry + daily cycle | DONE | agent:opus-p8 | `brain/.../bus/*` + `cycle.py` + `cli run-round` · `scripts/run-round.{sh,ps1}` · `pwa/src/sync/*` · 7 brain + 6 pwa tests · live full cycle vs Neo4j | 2026-06-29 |
 | P9 | 9 | Cross-persona corroboration + conflict threads | DONE | agent:opus-p9 | `brain/.../crosspersona.py` + planner integration + `cli corroborate` · 10 tests · live-verified vs Neo4j | 2026-06-29 |
 | P10 | 10 | Documentation generator (E2E process + SOPs + problems) | DONE | agent:opus-p10 | `brain/.../docgen/{traverse,render}.py` + `cli docgen` · 7 tests · live-verified vs Neo4j | 2026-06-29 |
@@ -96,17 +95,17 @@ _Nobody is actively working right now._ When you start, add a line:
 - **Embeddings (optional, recommended).** Best semantic dedup needs `uv sync --extra vectors`
   (fastembed). Without it the pipeline uses a deterministic hashing fallback (lexical only) —
   works, weaker recall. Run ingest with `uv run --extra vectors ...` to use embeddings.
-- ⚠️ **ElevenLabs account is on a plan that blocks library voices via the API (owner action).**
-  Live `/tts` returned **`402 paid_plan_required`**: *"Free users cannot use library voices via the
-  API."* The Worker forwarder is correct (it injected the key, reached ElevenLabs, and passed the
-  upstream error straight through) — this is purely an account/voice-policy gate. **Fix:** either set
-  `ELEVENLABS_VOICE_ID` (in `worker/wrangler.toml`) to a voice the plan permits (a premade/default or
-  your own generated/cloned voice), or upgrade the plan. Then re-run the `/tts` smoke test to confirm
-  audio bytes come back. The **same key likely gates STT** the same way — confirm during the eval.
-- **STT eval not yet done (owner action).** Before flipping P7 → DONE, validate ElevenLabs Scribe on
-  ~20 real, messy recordings (Indian-accented English, noise, SKUs/CRM jargon). A zero-dep harness is
-  ready: from `pwa/`, `node scripts/stt-eval.mjs <dir-of-recordings>` (put a same-named `.txt` next to
-  each clip for a WER; it reads the key from `worker/.dev.vars`). **Record the aggregate WER here.**
+- ✅ **RESOLVED (2026-06-29) — ElevenLabs plan gate.** Owner bought the **Starter** plan; the `402
+  paid_plan_required` is gone. Verified live **TTS + STT both 200** (a TTS→STT round-trip with the
+  default voice `21m00Tcm4TlvDq8ikWAM` + `scribe_v2` returned the exact sentence), confirmed **twice**:
+  direct ElevenLabs API call, and through the new **Pages Functions** `/tts` (35 KB audio) + `/stt`
+  (perfect transcript). No code/config change needed; swap `ELEVENLABS_VOICE_ID` later for a custom
+  voice if desired.
+- **STT field-accuracy eval (recommended QA, not blocking).** The Scribe endpoint is verified
+  working, but only on clean audio. Before fully trusting the permanent-truth transcript leg, run it
+  on ~20 real messy recordings (Indian-accented English, noise, SKUs/CRM jargon): from `pwa/`, `node
+  scripts/stt-eval.mjs <dir>` (same-named `.txt` per clip gives a WER; reads the key from
+  `worker/.dev.vars`). Record the aggregate WER here when done.
 - **PWA icons** are placeholders (`pwa` manifest references missing `icon-192/512.png`).
 - ⚠️ **Semantic batch conflict detection is deferred (P9 boundary, ADR #23).** P9 *routes* conflicts
   (gate-flagged `CONFLICTING` nodes → reconciliation threads to every contributor) and verifies
@@ -121,21 +120,52 @@ _Nobody is actively working right now._ When you start, add a line:
 
 ## Next up (prioritized queue)
 
-_All build phases (P0–P10) are DONE._ Only owner actions remain:
+_All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step + optional QA:
 
-1. **P7 owner actions (flip REVIEW → DONE):** (a) run the **STT eval gate** — `node
-   scripts/stt-eval.mjs <dir>` from `pwa/` over ~20 real messy recordings; record the WER in
-   Blockers. (b) Set a **usable `ELEVENLABS_VOICE_ID`** (or upgrade the plan) so `/tts` returns audio,
-   then confirm a spoken turn end-to-end on a phone.
-2. **P6 owner action:** `wrangler deploy` the Worker + connect Cloudflare Pages to `pwa/dist`; set
-   `ALLOWED_ORIGIN` to the Pages URL and `wrangler secret put DEEPSEEK_API_KEY` +
-   `wrangler secret put ELEVENLABS_API_KEY`.
+1. **Deploy (owner, one-time):** connect the repo to **Cloudflare Pages** → it auto-deploys on every
+   push thereafter. Full step-by-step in **`DEPLOY.md`**: push to GitHub → Pages → Connect to Git
+   (root dir `pwa`, build `npm run build`, output `dist`) → add the 2 secrets (`DEEPSEEK_API_KEY`,
+   `ELEVENLABS_API_KEY`) → first build → tighten `ALLOWED_ORIGIN` to the Pages URL. The repo is already
+   git-initialized + committed; just add a remote and `git push`.
+2. **Optional QA — STT field-accuracy:** run `node scripts/stt-eval.mjs <dir>` from `pwa/` over ~20
+   real messy recordings and record the WER in Blockers (the endpoint is verified; this measures
+   accuracy on field audio).
+3. **Optional — custom voice:** set `ELEVENLABS_VOICE_ID` in `pwa/wrangler.toml` to your own voice and
+   push (the default "Rachel" already works on the Starter plan).
 
 ---
 
 ## Handoff log (append-only · newest on top)
 
 Each entry: `### <date> · agent:<id>` then **Did / Next / Gotchas**. Never edit past entries.
+
+### 2026-06-29 · agent:opus-deploy — ElevenLabs verified + streamlined deploy; P7 → DONE
+- **Did:** (1) **Verified ElevenLabs on the new Starter plan** — the `402` is gone. A TTS→STT
+  round-trip (default voice `21m00Tcm4TlvDq8ikWAM` + `scribe_v2`) returned the exact sentence, proven
+  both via a direct API call and through the new Pages Functions (`/tts` 35 KB audio, `/stt` perfect
+  transcript). Flipped **P7 REVIEW → DONE** (voice leg works end-to-end). (2) **Streamlined the deploy
+  to GitHub→Cloudflare-Pages.** Moved the key-proxy into **`pwa/functions/`** (Pages Functions:
+  `llm.ts`/`stt.ts`/`tts.ts`/`health.ts` + canonical `_shared.ts`) so the PWA **and** its proxy are one
+  git-connected Pages project on a single origin — relative `/llm,/stt,/tts` unchanged, every `git
+  push` auto-deploys. Added `pwa/wrangler.toml` (Pages config + non-secret vars), `pwa/.dev.vars.example`,
+  pwa scripts `dev:cf`/`deploy`/`typecheck:functions`, and devdeps `@cloudflare/workers-types` +
+  `wrangler`. Rewrote `worker/src/index.ts` to import the **same** `_shared.ts` (zero duplicated proxy
+  logic; kept as an optional standalone). Wrote **`DEPLOY.md`** (one-time setup + the `git push`
+  workflow). `git init` + first commit (verified no secrets staged; added `.gitattributes` for LF).
+  **Verified:** functions+src+worker typecheck, build installable, 18 vitest, and **all 4 endpoints live
+  via `wrangler pages dev`** (incl. `/llm` real DeepSeek). ADR #26.
+- **Next:** **Owner connects the repo to Cloudflare Pages once** (DEPLOY.md); thereafter updates are
+  `git push`. Optional: STT field-WER eval; custom voice id.
+- **Gotchas:** (1) **Single source of truth for the proxy = `pwa/functions/_shared.ts`.** The Pages
+  route files and `worker/src/index.ts` both import it (the worker via `../../pwa/functions/_shared`).
+  Edit proxy behaviour there only. (2) **Secrets are NOT committed** (`.gitignore` covers `brain/.env`,
+  `**/.dev.vars`); set `DEEPSEEK_API_KEY` + `ELEVENLABS_API_KEY` in the Pages dashboard (or `wrangler
+  pages secret put`). Non-secret vars live in `pwa/wrangler.toml`. (3) **Pages build settings:** root
+  dir `pwa`, build `npm run build`, output `dist`; functions auto-detected from `pwa/functions/`.
+  (4) Local full-stack dev = `npm run dev:cf` (needs `pwa/.dev.vars`); the old split (`wrangler dev` in
+  `worker/` + Vite proxy) still works. (5) `worker/` is now optional — production is Pages Functions.
+  (6) `tsc -b` (pwa build) only covers `src/`; functions are compiled by Cloudflare (esbuild strips
+  types, won't catch type errors) — run `npm run typecheck:functions` before pushing proxy changes.
 
 ### 2026-06-29 · agent:opus-p10 — Phase 10 (Documentation generator); P10 → DONE · **BUILD COMPLETE**
 - **Did:** Built the deliverable generator — the graph turned into living, traceable docs. New

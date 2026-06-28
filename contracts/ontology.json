@@ -1,0 +1,47 @@
+{
+  "$schema_version": "1.0.0",
+  "description": "Warp Compass ontology — the controlled vocabulary and completeness compass. The LLM may ONLY choose from these node/edge types; it may never invent new ones (anything new goes to a BA review queue). This is NOT a list of questions; it is the internal definition of 'what a complete picture looks like'. See docs/02-technical-approach.md §6.2 and docs/DATA-CONTRACTS.md.",
+  "node_types": [
+    { "type": "Role", "slug_prefix": "role", "description": "A role/level in the org (e.g., Sales Rep, Inventory Lead, Manager). Personas map to roles.", "completeness_fields": ["reports_to", "performs"] },
+    { "type": "Activity", "slug_prefix": "act", "description": "A unit of work a role performs.", "completeness_fields": ["trigger", "inputs", "system", "output", "next_handoff", "exceptions", "rules"] },
+    { "type": "System", "slug_prefix": "sys", "description": "A tool/application used to perform an activity (e.g., CRM, spreadsheet).", "completeness_fields": ["used_by"] },
+    { "type": "Artifact", "slug_prefix": "art", "description": "A document/record/data object produced or consumed by an activity (e.g., quote, order, report).", "completeness_fields": ["produced_by_or_consumed_by"] },
+    { "type": "Event", "slug_prefix": "evt", "description": "A trigger that starts an activity (e.g., 'order received', 'month end').", "completeness_fields": ["triggers"] },
+    { "type": "ApprovalPoint", "slug_prefix": "appr", "description": "A point where approval/sign-off is required before work proceeds.", "completeness_fields": ["approver_role", "condition"] },
+    { "type": "Rule", "slug_prefix": "rule", "description": "A policy/constraint governing how an activity is done.", "completeness_fields": ["governs"] },
+    { "type": "Problem", "slug_prefix": "prob", "description": "A pain point / bottleneck experienced at some level.", "completeness_fields": ["affected_activity", "frequency", "impact", "suspected_cause"] },
+    { "type": "Desire", "slug_prefix": "des", "description": "A wished-for outcome / what someone wishes were different.", "completeness_fields": ["relates_to_problem"] },
+    { "type": "KPI", "slug_prefix": "kpi", "description": "A metric an activity is measured by.", "completeness_fields": ["measures"] }
+  ],
+  "edge_types": [
+    { "type": "PERFORMS", "from": "Role", "to": "Activity" },
+    { "type": "USES", "from": "Activity", "to": "System" },
+    { "type": "PRODUCES", "from": "Activity", "to": "Artifact" },
+    { "type": "CONSUMES", "from": "Activity", "to": "Artifact" },
+    { "type": "TRIGGERS", "from": "Event", "to": "Activity" },
+    { "type": "REQUIRES_APPROVAL_FROM", "from": "Activity", "to": "Role" },
+    { "type": "HANDS_OFF_TO", "from": "Activity", "to": "Role" },
+    { "type": "ESCALATES_TO", "from": "Role", "to": "Role" },
+    { "type": "GOVERNED_BY", "from": "Activity", "to": "Rule" },
+    { "type": "BLOCKS", "from": "Problem", "to": "Activity" },
+    { "type": "MEASURED_BY", "from": "Activity", "to": "KPI" },
+    { "type": "REPORTS_TO", "from": "Role", "to": "Role" }
+  ],
+  "confidence_statuses": ["proposed", "unverified", "confirmed", "conflicting"],
+  "taxonomy_registry": {
+    "description": "Governed, hierarchical category codes used as a many-to-many tag on nodes (NOT node identity — see §6.3). Codes become the final document's section numbering (§11). A genuinely new code goes to a pending-taxonomy review queue, never straight into the graph.",
+    "codes": [
+      { "code": "01", "label": "Intake & Triggers" },
+      { "code": "02", "label": "Core Activities" },
+      { "code": "03", "label": "Tools & Systems" },
+      { "code": "04", "label": "Handoffs & Escalation" },
+      { "code": "05", "label": "Approvals" },
+      { "code": "05.1", "label": "Discount / Pricing Approvals" },
+      { "code": "06", "label": "Rules & Policies" },
+      { "code": "07", "label": "Outputs & Artifacts" },
+      { "code": "08", "label": "Exceptions" },
+      { "code": "09", "label": "Problems & Pain Points" },
+      { "code": "10", "label": "Metrics & KPIs" }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://warp-compass/contracts/answer-log.schema.json",
+  "title": "AnswerLog",
+  "description": "Runner -> Brain. Immutable, append-only, the SOURCE OF TRUTH. The runner only ever WRITES this; the brain only ever READS it. The graph is re-derivable from these logs. See docs/02-technical-approach.md §5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "persona_id", "participant_id", "entries"],
+  "properties": {
+    "session_id": { "type": "string", "description": "e.g. 's_2026_0312_pm'." },
+    "persona_id": { "type": "string", "description": "The inferred role; prototype maps 1:1 from participant." },
+    "participant_id": { "type": "string", "description": "The real person/device (UUID or chosen name)." },
+    "schema_version": { "type": "string", "default": "1.0.0" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "raw_answer", "ts"],
+        "properties": {
+          "thread_id": { "type": ["string", "null"], "description": "Open-thread this entry addresses, or null for free narration." },
+          "kind": { "type": "string", "enum": ["guided", "free_narration"] },
+          "agent_utterance": { "type": ["string", "null"], "description": "What the agent said (null for free narration)." },
+          "raw_answer": { "type": "string", "description": "Verbatim transcript — the permanent truth; a misheard word is corrupted forever." },
+          "audio_ptr": { "type": ["string", "null"], "description": "Optional pointer to the recorded audio blob.", "default": null },
+          "ts": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

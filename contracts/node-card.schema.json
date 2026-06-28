@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://warp-compass/contracts/node-card.schema.json",
+  "title": "NodeCard",
+  "description": "The compact, canonical card every graph node carries — what gets embedded and what the LLM reads when deciding 'same or new'. See docs/02-technical-approach.md §6.4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "canonical_name", "description", "category_codes"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable, never-reused, human-readable slug. Format '<prefix>.<kebab>' e.g. 'appr.discount-over-10pct'.",
+      "pattern": "^[a-z]+\\.[a-z0-9-]+$"
+    },
+    "type": {
+      "type": "string",
+      "description": "Fixed enum from the ontology node_types.",
+      "enum": ["Role", "Activity", "System", "Artifact", "Event", "ApprovalPoint", "Rule", "Problem", "Desire", "KPI"]
+    },
+    "canonical_name": { "type": "string", "minLength": 1 },
+    "aliases": {
+      "type": "array",
+      "description": "The dedup superpower — different employees name the same thing differently; aliases collapse them onto one node.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "description": { "type": "string", "minLength": 1 },
+    "category_codes": {
+      "type": "array",
+      "description": "Many-to-many governed tags from the taxonomy registry. Must already exist in contracts/ontology.json (a new code goes to the pending-taxonomy queue).",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "key_attributes": {
+      "type": "object",
+      "description": "Type-specific structured attributes (e.g., {threshold:'10%', system:'sys.crm-quote'}).",
+      "default": {}
+    },
+    "provenance": {
+      "type": "array",
+      "description": "Every fact traces to who said it and when; status only rises with evidence.",
+      "items": { "$ref": "#/definitions/provenance" },
+      "default": []
+    }
+  },
+  "definitions": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["said_by", "session_id", "confidence", "status", "ts"],
+      "properties": {
+        "said_by": { "type": "string", "description": "persona_id of the source." },
+        "session_id": { "type": "string" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "status": { "type": "string", "enum": ["proposed", "unverified", "confirmed", "conflicting"] },
+        "ts": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

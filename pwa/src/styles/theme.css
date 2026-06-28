@@ -1,0 +1,319 @@
+/* Warp Compass theme — derived from docs/assets/webapp-theme-reference.png (Warp Drive Tech).
+   Light surface with a faint grid, vivid green accent, bold near-black display headings,
+   rounded pill buttons, generous whitespace, oversized stat numerals.
+   Tokens live here; refine exact greens by sampling the reference. See docs/THEME.md. */
+
+:root {
+  --wc-green: #15c95b;
+  --wc-green-deep: #0fa549;
+  --wc-ink: #0c0f0d;
+  --wc-ink-soft: #5b6660;
+  --wc-bg: #f3faf5;
+  --wc-bg-2: #eaf6ee;
+  --wc-line: rgba(12, 15, 13, 0.06);
+  --wc-card: #ffffff;
+  --wc-radius: 16px;
+  --wc-radius-pill: 999px;
+  --wc-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--wc-font);
+  color: var(--wc-ink);
+  background-color: var(--wc-bg);
+  /* faint grid, like the reference site */
+  background-image:
+    linear-gradient(var(--wc-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--wc-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wc-app {
+  min-height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 20px 40px;
+}
+
+.wc-header {
+  display: flex;
+  align-items: center;
+  padding: 20px 0;
+}
+
+.wc-logo {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-size: 18px;
+}
+.wc-logo-thin {
+  font-weight: 500;
+  color: var(--wc-ink-soft);
+  margin-left: 6px;
+}
+
+.wc-hero {
+  text-align: center;
+  padding-top: 32px;
+}
+
+.wc-title {
+  font-size: clamp(34px, 9vw, 56px);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+}
+.wc-accent {
+  color: var(--wc-green);
+}
+
+.wc-sub {
+  font-size: 17px;
+  color: var(--wc-ink-soft);
+  max-width: 34ch;
+  margin: 0 auto 28px;
+  line-height: 1.5;
+}
+
+.wc-pill {
+  appearance: none;
+  border: none;
+  background: var(--wc-green);
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  padding: 16px 28px;
+  border-radius: var(--wc-radius-pill);
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(21, 201, 91, 0.28);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.wc-pill:hover:not(:disabled) {
+  background: var(--wc-green-deep);
+  transform: translateY(-1px);
+}
+.wc-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.wc-note {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--wc-ink-soft);
+}
+.wc-note code {
+  background: var(--wc-bg-2);
+  padding: 1px 5px;
+  border-radius: 6px;
+}
+
+.wc-stats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(24px, 8vw, 64px);
+  margin-top: 56px;
+}
+.wc-stat-num {
+  font-size: clamp(40px, 12vw, 72px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.wc-stat-label {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--wc-ink-soft);
+}
+
+/* ── Live session (Phase 6) ───────────────────────────────────────────────── */
+.wc-session {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.wc-link {
+  margin-left: auto;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--wc-ink-soft);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.wc-link:hover {
+  color: var(--wc-ink);
+}
+
+.wc-chat {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 20px;
+}
+.wc-msg {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: var(--wc-radius);
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wc-msg-agent {
+  align-self: flex-start;
+  background: var(--wc-card);
+  border: 1px solid var(--wc-line);
+  border-bottom-left-radius: 4px;
+}
+.wc-msg-person {
+  align-self: flex-end;
+  background: var(--wc-green);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.wc-msg-error {
+  align-self: center;
+  background: #fff0f0;
+  color: #a11;
+  border: 1px solid #f3caca;
+  font-size: 14px;
+}
+.wc-thinking {
+  letter-spacing: 2px;
+  opacity: 0.6;
+}
+
+.wc-composer,
+.wc-closed {
+  position: sticky;
+  bottom: 0;
+  background: var(--wc-bg);
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--wc-line);
+}
+.wc-input {
+  width: 100%;
+  resize: none;
+  font: inherit;
+  font-size: 16px;
+  color: var(--wc-ink);
+  background: var(--wc-card);
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius);
+  padding: 12px 14px;
+}
+.wc-input:focus {
+  outline: 2px solid var(--wc-green);
+  outline-offset: 1px;
+}
+.wc-input:disabled {
+  opacity: 0.6;
+}
+.wc-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+.wc-ghost {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--wc-line);
+  color: var(--wc-ink-soft);
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 18px;
+  border-radius: var(--wc-radius-pill);
+  cursor: pointer;
+}
+.wc-ghost:hover:not(:disabled) {
+  color: var(--wc-ink);
+  border-color: var(--wc-ink-soft);
+}
+.wc-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Voice (Phase 7) ──────────────────────────────────────────────────────── */
+.wc-mic {
+  appearance: none;
+  background: var(--wc-card);
+  border: 1px solid var(--wc-green);
+  color: var(--wc-green-deep);
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 12px 20px;
+  border-radius: var(--wc-radius-pill);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.wc-mic:hover:not(:disabled) {
+  background: var(--wc-bg-2);
+}
+.wc-mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.wc-mic-live {
+  background: var(--wc-green);
+  color: #fff;
+  border-color: var(--wc-green);
+  animation: wc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes wc-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 201, 91, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(21, 201, 91, 0);
+  }
+}
+.wc-voice-toggle {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--wc-ink-soft);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 4px 8px;
+}
+.wc-voice-toggle:hover {
+  color: var(--wc-ink);
+}
+/* When the voice toggle is present it takes the auto margin, so the exit link sits next to it. */
+.wc-voice-toggle + .wc-link {
+  margin-left: 12px;
+}
+.wc-listening {
+  letter-spacing: 4px;
+  opacity: 0.7;
+  animation: wc-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Sync / bus (Phase 8) ─────────────────────────────────────────────────── */
+.wc-hero-actions {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 28px;
+}
+.wc-import-error {
+  color: #a11;
+}

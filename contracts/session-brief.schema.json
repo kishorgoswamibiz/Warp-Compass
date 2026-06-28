@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://warp-compass/contracts/session-brief.schema.json",
+  "title": "SessionBrief",
+  "description": "Brain -> Runner. The persona-scoped memory view + ranked open threads. This is GUIDANCE the runner is free to deviate from, NOT a script. Replaces the old fixed questionnaire. On a cold start it carries no threads — only the generic discovery openers. See docs/02-technical-approach.md §5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "persona_id", "cold_start", "open_threads"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "persona_id": { "type": "string" },
+    "schema_version": { "type": "string", "default": "1.0.0" },
+    "cold_start": { "type": "boolean", "description": "True on first-ever session (empty brain): no threads, only generic openers." },
+    "persona_summary": { "type": "string", "description": "The persona's evolving understanding so far." },
+    "open_threads": {
+      "type": "array",
+      "description": "Ranked threads to pull on. Empty when cold_start is true.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "goal", "priority"],
+        "properties": {
+          "id": { "type": "string" },
+          "goal": { "type": "string", "description": "What understanding this thread is meant to close." },
+          "why": { "type": "string", "description": "Why it matters now (e.g., single-source pain point, cross-persona corroboration)." },
+          "priority": { "type": "integer", "minimum": 1 },
+          "suggested_opener": { "type": "string", "description": "Scaffolding the runner may reword, not rails." },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["if", "ask"],
+              "properties": {
+                "if": { "type": "string", "description": "Condition on the person's answer." },
+                "ask": { "type": "string", "description": "The conditional follow-up probe." }
+              }
+            },
+            "default": []
+          }
+        }
+      }
+    },
+    "reserve_threads": {
+      "type": "array",
+      "description": "Lower-priority thread ids held in reserve.",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}

@@ -1,0 +1,30 @@
+# --- secrets ---
+.env
+.env.*
+!.env.example
+**/.dev.vars
+
+# --- python / brain ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+uv.lock
+
+# --- node / pwa + worker ---
+node_modules/
+dist/
+.wrangler/
+*.tsbuildinfo
+
+# --- local working state (vectors, review queues) + sync bus ---
+_state/
+_bus/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

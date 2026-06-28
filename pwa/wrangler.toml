@@ -1,0 +1,19 @@
+# Cloudflare Pages project config (the PWA + its key-proxy Functions deploy together).
+# Connect this repo to Pages once; every git push then auto-builds & deploys. See DEPLOY.md.
+name = "warp-compass"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-07-25"
+
+# Non-secret config (safe to commit). The Functions read these from the Pages environment.
+[vars]
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_MODEL_LIVE = "deepseek-v4-flash"   # live tier injected for /llm (confirmed working)
+ELEVENLABS_BASE_URL = "https://api.elevenlabs.io"
+ELEVENLABS_STT_MODEL = "scribe_v2"           # accuracy-first batch transcription
+ELEVENLABS_TTS_MODEL = "eleven_flash_v2_5"   # switch to "eleven_v3" for more expressive speech
+ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM" # default "Rachel"; set your own voice id any time
+ALLOWED_ORIGIN = "*"                          # tighten to your Pages URL after first deploy
+
+# SECRETS ARE NOT HERE. Set them once in the Cloudflare dashboard (Pages → Settings → Variables and
+# Secrets), or: `npx wrangler pages secret put DEEPSEEK_API_KEY` and `... ELEVENLABS_API_KEY`.
+# For local `wrangler pages dev`, put them in pwa/.dev.vars (git-ignored; see .dev.vars.example).

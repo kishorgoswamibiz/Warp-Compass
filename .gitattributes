@@ -1,0 +1,8 @@
+# Normalize line endings: LF in the repo (the Cloudflare build + shell scripts run on Linux).
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png binary
+*.ico binary
+*.mp3 binary
+*.wav binary

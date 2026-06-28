@@ -1,0 +1,23 @@
+name = "warp-compass-worker"
+main = "src/index.ts"
+compatibility_date = "2024-07-25"
+
+# Secrets are set with `wrangler secret put <NAME>` (never commit them):
+#   wrangler secret put DEEPSEEK_API_KEY
+#   wrangler secret put ELEVENLABS_API_KEY
+# Locally, put them in worker/.dev.vars (git-ignored) for `wrangler dev`.
+
+[vars]
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_MODEL_LIVE = "deepseek-v4-flash"  # live tier the Worker injects for /llm (confirmed working)
+
+# ElevenLabs voice leg (P7). STT is accuracy-first (batch Scribe, not realtime) — the transcript is
+# the permanent Answer Log truth. TTS defaults to Flash v2.5 (fast, widely available); switch to
+# "eleven_v3" for more expressive output. VOICE_ID is one consistent voice for every user.
+ELEVENLABS_BASE_URL = "https://api.elevenlabs.io"
+ELEVENLABS_STT_MODEL = "scribe_v2"
+ELEVENLABS_TTS_MODEL = "eleven_flash_v2_5"
+ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # default public voice ("Rachel"); set your own before launch
+
+# CORS allow-list for the deployed PWA origin (set to your Pages URL before deploy; "*" for dev).
+ALLOWED_ORIGIN = "*"

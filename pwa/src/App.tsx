@@ -95,7 +95,125 @@ export function App() {
             <div className="wc-stat-label">Connected brain</div>
           </div>
         </div>
+
+        <a className="wc-scrollcue" href="#how">
+          See how it works <span aria-hidden>↓</span>
+        </a>
       </main>
+
+      {/* ── What it does (the objective) ─────────────────────────────────── */}
+      <section className="wc-explain" id="what">
+        <p className="wc-eyebrow">What it does</p>
+        <h2 className="wc-h2">
+          It does the consultant's discovery — at every level, then connects it into one
+          picture.
+        </h2>
+        <p className="wc-lead">
+          Instead of a consultant manually interviewing every role, the system interviews
+          them itself and weaves every answer into a single connected model of how the
+          company really runs.
+        </p>
+
+        <div className="wc-flow">
+          <div className="wc-chips">
+            {["Sales reps", "Managers", "Inventory", "Delivery", "Executives"].map((r) => (
+              <span className="wc-chip" key={r}>
+                {r}
+              </span>
+            ))}
+          </div>
+
+          <div className="wc-flow-arrow" aria-hidden>
+            ↓
+          </div>
+
+          <div className="wc-flow-node">
+            <strong>One connected brain</strong>
+            <span>Every answer feeds a single shared model — one level shapes the next.</span>
+          </div>
+
+          <div className="wc-flow-arrow" aria-hidden>
+            ↓
+          </div>
+
+          <div className="wc-flow-out">
+            <div className="wc-out-card">
+              <strong>One end-to-end process</strong>
+              <span>The complete SOP, stitched across every level — fully traceable.</span>
+            </div>
+            <div className="wc-out-card">
+              <strong>Problem register</strong>
+              <span>The pain points each role lives with, captured as they're said.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── How it works (two-speed architecture) ────────────────────────── */}
+      <section className="wc-explain" id="how">
+        <p className="wc-eyebrow">How it works</p>
+        <h2 className="wc-h2">Two speeds: instant to talk to, deep to understand.</h2>
+        <p className="wc-lead">
+          The conversation stays fast and human on your phone; the heavy thinking happens
+          quietly between sessions — so you never wait on the machine.
+        </p>
+
+        <div className="wc-planes">
+          <article className="wc-plane">
+            <div className="wc-plane-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+                <line x1="11" y1="18.5" x2="13" y2="18.5" />
+              </svg>
+            </div>
+            <h3>Talk — on your phone</h3>
+            <p>
+              A fast, human conversation. Voice or text. It listens, follows up, and catches
+              contradictions on the spot. No deep thinking here — just listen and record.
+            </p>
+          </article>
+
+          <div className="wc-plane-link" aria-hidden>
+            <span className="wc-wire">Answer Log ↑</span>
+            <span className="wc-wire">Session Brief ↓</span>
+          </div>
+
+          <article className="wc-plane">
+            <div className="wc-plane-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="7" r="2" />
+                <circle cx="18" cy="6" r="2" />
+                <circle cx="16" cy="17" r="2" />
+                <circle cx="7" cy="16" r="2" />
+                <line x1="8" y1="7.5" x2="16" y2="6.5" />
+                <line x1="7" y1="9" x2="7" y2="14" />
+                <line x1="17.2" y1="7.8" x2="16.3" y2="15.1" />
+                <line x1="8.8" y1="15.4" x2="14.4" y2="16.6" />
+              </svg>
+            </div>
+            <h3>Think — the brain</h3>
+            <p>
+              Between sessions, transcripts become a connected graph — merging facts, flagging
+              conflicts, and scoring what's still missing to ask next.
+            </p>
+          </article>
+        </div>
+
+        <div className="wc-principles">
+          <div className="wc-principle">
+            <strong>Discovery-first</strong>
+            <span>No fixed questionnaire — it discovers the real org, not assumptions.</span>
+          </div>
+          <div className="wc-principle">
+            <strong>Graph memory</strong>
+            <span>Relationships, not a text blob — and rebuildable from the raw logs.</span>
+          </div>
+          <div className="wc-principle">
+            <strong>Voice-first</strong>
+            <span>Accurate transcripts are the permanent source of truth.</span>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

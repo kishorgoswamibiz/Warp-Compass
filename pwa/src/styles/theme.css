@@ -317,3 +317,219 @@ body {
 .wc-import-error {
   color: #a11;
 }
+
+/* ── Home explainer sections ("What it does" / "How it works") ────────────── */
+.wc-scrollcue {
+  display: inline-block;
+  margin: 48px auto 0;
+  text-align: center;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wc-ink-soft);
+  text-decoration: none;
+}
+.wc-scrollcue span {
+  display: block;
+  margin-top: 6px;
+  font-size: 18px;
+  color: var(--wc-green);
+  animation: wc-bob 1.6s ease-in-out infinite;
+}
+@keyframes wc-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+.wc-explain {
+  padding: 64px 0 8px;
+  border-top: 1px solid var(--wc-line);
+  margin-top: 56px;
+}
+.wc-explain:first-of-type {
+  border-top: none;
+  margin-top: 0;
+}
+.wc-eyebrow {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--wc-green-deep);
+}
+.wc-h2 {
+  font-size: clamp(24px, 6vw, 34px);
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 14px;
+}
+.wc-lead {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--wc-ink-soft);
+  max-width: 52ch;
+  margin: 0 0 32px;
+}
+
+/* Flow diagram: voices → brain → outputs */
+.wc-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.wc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.wc-chip {
+  background: var(--wc-card);
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius-pill);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wc-ink);
+}
+.wc-flow-arrow {
+  color: var(--wc-green);
+  font-size: 22px;
+  line-height: 1;
+}
+.wc-flow-node {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  background: var(--wc-green);
+  color: #fff;
+  border-radius: var(--wc-radius);
+  padding: 18px 20px;
+  box-shadow: 0 10px 28px rgba(21, 201, 91, 0.25);
+}
+.wc-flow-node strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+}
+.wc-flow-node span {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+}
+.wc-flow-out {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+}
+.wc-out-card {
+  background: var(--wc-card);
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius);
+  padding: 16px;
+}
+.wc-out-card strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+}
+.wc-out-card span {
+  display: block;
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--wc-ink-soft);
+}
+
+/* Two-speed planes */
+.wc-planes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wc-plane {
+  background: var(--wc-card);
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius);
+  padding: 20px;
+}
+.wc-plane-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--wc-bg-2);
+  color: var(--wc-green-deep);
+  margin-bottom: 12px;
+}
+.wc-plane h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.wc-plane p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--wc-ink-soft);
+}
+.wc-plane-link {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wc-wire {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--wc-green-deep);
+  background: var(--wc-bg-2);
+  border-radius: var(--wc-radius-pill);
+  padding: 5px 12px;
+}
+
+/* Three principles */
+.wc-principles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 24px;
+}
+.wc-principle {
+  padding: 16px;
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius);
+  background: var(--wc-bg-2);
+}
+.wc-principle strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.wc-principle span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wc-ink-soft);
+}
+
+@media (max-width: 560px) {
+  .wc-flow-out,
+  .wc-principles {
+    grid-template-columns: 1fr;
+  }
+}

@@ -53,7 +53,7 @@ export function methodNotAllowed(env: Env): Response {
 }
 
 export function healthResponse(env: Env): Response {
-  return jsonResponse({ ok: true, service: "warp-compass", phase: "p10" }, 200, env);
+  return jsonResponse({ ok: true, service: "warp-compass", phase: "p11" }, 200, env);
 }
 
 interface ChatMessage {

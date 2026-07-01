@@ -141,6 +141,25 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 Each entry: `### <date> · agent:<id>` then **Did / Next / Gotchas**. Never edit past entries.
 
+### 2026-07-01 · agent:opus-p11 — verified live deploy + import-button UX fix + operator manual
+- **Did:** (1) **Verified P11 is live in production** by probing `warp-compass.pages.dev`: `/health`
+  → `{ok:true,…}`, and `/sync/brief?participant_id=diagnostic_probe` → **`{ok:true,brief:null}`** —
+  proving the `/sync/*` Functions are deployed, the Pages secrets are wired (no `server_misconfigured`),
+  and Apps Script responds correctly. Sync backend confirmed working end-to-end. (2) **Fixed the
+  "Import a brief file" confusion** — it was rendered *unconditionally* (intentional fallback, but it
+  read as "sync isn't working"). Now the landing shows only **Start a session**; the manual
+  *Start without a brief* / *Import a brief file* fallback appears **only when the automatic pull
+  fails** (`pullFailed` state in `App.tsx`). (3) Bumped the `/health` phase string `p10`→`p11`.
+  (4) **Added `OPERATOR-MANUAL.md`** (repo root) — the step-by-step laptop routine to run after each
+  round of mobile sessions (start Neo4j → `run-round` → `corroborate --apply` → `docgen`), with a
+  troubleshooting table incl. the PWA service-worker cache note. **Verified:** typecheck (src +
+  functions) clean, **24 vitest**, build installable. Committed + pushed.
+- **Next:** Nothing blocked. (If a user still sees the old UI, it's the cached service worker — fully
+  reopen the installed PWA to pick up the new bundle.)
+- **Gotchas:** (1) The import button was **never** a deploy failure — it was always-rendered by design;
+  now fallback-only. (2) `registerType:"autoUpdate"` (vite-plugin-pwa) updates the SW in the
+  background; a client on the old cached bundle needs a full reopen/second load to get new code.
+
 ### 2026-07-01 · agent:opus-p11 — Phase 11 owner setup complete; P11 → DONE
 - **Did:** Owner completed the Google setup end-to-end and **tested it working**: created the Drive
   root, deployed the Apps Script Web App (execute-as-owner / access-anyone) with `ROOT_FOLDER_ID` +

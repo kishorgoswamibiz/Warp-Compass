@@ -1,8 +1,8 @@
 // Phase 8/11 shell: a landing screen → the live runner (SessionScreen). Holds NO graph; all live
 // calls route through the key-proxy (keys never in the browser). The phone has a STABLE participant
 // id (the bus is keyed by it) and, on start, AUTO-PULLS its latest Session Brief from the brain over
-// the network (Phase 11) to cross-pollinate the session — no manual import. If the network is
-// unreachable it cold-starts, and a manual brief-file import stays available as an offline fallback.
+// the network (Phase 11) to cross-pollinate the session — no manual import in normal use. The manual
+// brief-file import appears ONLY if that automatic pull fails (offline / endpoint unreachable).
 import { useRef, useState } from "react";
 import { SessionScreen } from "./screens/SessionScreen";
 import { getParticipant, parseBriefFile, pullLatestBrief } from "./sync";
@@ -12,24 +12,33 @@ export function App() {
   const [started, setStarted] = useState(false);
   const [brief, setBrief] = useState<SessionBrief | undefined>(undefined);
   const [pulling, setPulling] = useState(false);
+  const [pullFailed, setPullFailed] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const participant = getParticipant();
   const shortId = participant.participant_id.replace(/^p_/, "").slice(0, 8);
 
-  // Start a session, auto-pulling the latest brief first. A pull failure (offline) cold-starts
-  // gracefully — the manual import remains for that case.
+  // Start a session, auto-pulling the latest brief first (warm start). On success we go straight in;
+  // only if the pull fails do we stay and reveal the offline fallback (start cold / import a file).
   const startSession = async () => {
     setPulling(true);
+    setPullFailed(false);
     setImportError(null);
     try {
-      setBrief((await pullLatestBrief(participant.participant_id)) ?? undefined);
+      const b = await pullLatestBrief(participant.participant_id);
+      setBrief(b ?? undefined);
+      setStarted(true);
     } catch {
-      setBrief(undefined);
+      setPullFailed(true);
     } finally {
       setPulling(false);
-      setStarted(true);
     }
+  };
+
+  // Offline fallback only: begin without a brief (cold start).
+  const startCold = () => {
+    setBrief(undefined);
+    setStarted(true);
   };
 
   if (started) {
@@ -72,17 +81,32 @@ export function App() {
           <button className="wc-pill" onClick={() => void startSession()} disabled={pulling}>
             {pulling ? "Loading your brief…" : "Start a session →"}
           </button>
-          <button className="wc-ghost" onClick={() => fileRef.current?.click()} disabled={pulling}>
-            Import a brief file
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(e) => void onPickBrief(e.target.files?.[0] ?? undefined)}
-          />
         </div>
+
+        {/* Offline fallback — shown ONLY when the automatic brief pull fails. */}
+        {pullFailed && (
+          <div className="wc-fallback">
+            <p className="wc-note wc-import-error">
+              Couldn't reach the brain just now. Start without today's brief, or import a brief file
+              if you were given one.
+            </p>
+            <div className="wc-toolbar">
+              <button className="wc-ghost" onClick={startCold}>
+                Start without a brief
+              </button>
+              <button className="wc-ghost" onClick={() => fileRef.current?.click()}>
+                Import a brief file
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => void onPickBrief(e.target.files?.[0] ?? undefined)}
+            />
+          </div>
+        )}
         {importError && <p className="wc-note wc-import-error">Couldn't import: {importError}</p>}
         <p className="wc-note">
           Voice or text. Your answers sync to the brain automatically, and your updated brief loads

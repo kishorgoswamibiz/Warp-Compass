@@ -545,7 +545,9 @@ the prototype↔v1 move stays cheap:
 - `TTSProvider` → ElevenLabs v3/Flash (alt: free browser TTS **in dev only**).
 - `LLMProvider` → DeepSeek (fast + heavy variants).
 - `GraphStore` → Neo4j Community (alt: embedded Ladybug later).
-- `Bus` → shared cloud folder now (alt: sync endpoint in v1).
+- `Bus` → **networked via a Google Apps Script Web App + Drive-for-Desktop (Phase 11)**; the same
+  `FolderBus` layout, now synced automatically (was: manual shared-folder hand-off). See
+  `docs/plan/phase-11-drive-sync.md` + `apps-script/README.md`.
 
 ---
 

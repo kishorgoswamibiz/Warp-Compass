@@ -1,19 +1,36 @@
-// Phase 8 shell: a landing screen → the live runner (SessionScreen). Holds NO graph; all live calls
-// route through the Worker key-proxy (keys never in the browser). The phone has a STABLE participant
-// id (the bus folder is keyed by it) and can import its latest Session Brief from the bus to
-// cross-pollinate the next session; a fresh start cold-starts.
+// Phase 8/11 shell: a landing screen → the live runner (SessionScreen). Holds NO graph; all live
+// calls route through the key-proxy (keys never in the browser). The phone has a STABLE participant
+// id (the bus is keyed by it) and, on start, AUTO-PULLS its latest Session Brief from the brain over
+// the network (Phase 11) to cross-pollinate the session — no manual import. If the network is
+// unreachable it cold-starts, and a manual brief-file import stays available as an offline fallback.
 import { useRef, useState } from "react";
 import { SessionScreen } from "./screens/SessionScreen";
-import { getParticipant, parseBriefFile } from "./sync";
+import { getParticipant, parseBriefFile, pullLatestBrief } from "./sync";
 import type { SessionBrief } from "./runner";
 
 export function App() {
   const [started, setStarted] = useState(false);
   const [brief, setBrief] = useState<SessionBrief | undefined>(undefined);
+  const [pulling, setPulling] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const participant = getParticipant();
   const shortId = participant.participant_id.replace(/^p_/, "").slice(0, 8);
+
+  // Start a session, auto-pulling the latest brief first. A pull failure (offline) cold-starts
+  // gracefully — the manual import remains for that case.
+  const startSession = async () => {
+    setPulling(true);
+    setImportError(null);
+    try {
+      setBrief((await pullLatestBrief(participant.participant_id)) ?? undefined);
+    } catch {
+      setBrief(undefined);
+    } finally {
+      setPulling(false);
+      setStarted(true);
+    }
+  };
 
   if (started) {
     return (
@@ -52,17 +69,11 @@ export function App() {
         </p>
 
         <div className="wc-toolbar wc-hero-actions">
-          <button
-            className="wc-pill"
-            onClick={() => {
-              setBrief(undefined);
-              setStarted(true);
-            }}
-          >
-            Start a session →
+          <button className="wc-pill" onClick={() => void startSession()} disabled={pulling}>
+            {pulling ? "Loading your brief…" : "Start a session →"}
           </button>
-          <button className="wc-ghost" onClick={() => fileRef.current?.click()}>
-            Import today's brief
+          <button className="wc-ghost" onClick={() => fileRef.current?.click()} disabled={pulling}>
+            Import a brief file
           </button>
           <input
             ref={fileRef}
@@ -74,8 +85,8 @@ export function App() {
         </div>
         {importError && <p className="wc-note wc-import-error">Couldn't import: {importError}</p>}
         <p className="wc-note">
-          Voice or text. Your answers are saved as an Answer Log — drop it into your folder on the
-          shared bus; the daily round sends back an updated brief to import here.
+          Voice or text. Your answers sync to the brain automatically, and your updated brief loads
+          here on its own next time — nothing to export or import by hand.
         </p>
         <p className="wc-note">
           You are <code>{shortId}</code> on this device.

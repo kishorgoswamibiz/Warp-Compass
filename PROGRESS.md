@@ -10,15 +10,15 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL 11 PHASES DONE** (P0–P10). Feature-complete end to end: ingest spine →
-  completeness → Planner → live runner → PWA + key-proxy → **voice (P7 DONE, live TTS+STT on the
-  Starter plan)** → sync cycle → connected cross-persona brain → documentation generator. The **only**
-  remaining work is the **P6 deploy** — and it's now a **one-time GitHub→Cloudflare-Pages connect**,
-  after which every `git push` auto-deploys (see **`DEPLOY.md`**). Repo is git-initialized + committed,
-  ready to push.
-- **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build. Remaining = the owner connecting the repo to Cloudflare
-  Pages once (no code blocked).
-- **Last updated:** 2026-06-29 · by `agent:opus-deploy`
+- **Phase:** **ALL PHASES DONE (P0–P11).** Feature-complete + deployed: ingest spine → completeness →
+  Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
+  connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync (live +
+  owner-tested)**. The PWA is on Cloudflare Pages (auto-deploys on `git push`), and users now reach the
+  brain with **no manual export/import** (Apps Script Web App + Drive-for-Desktop; runbook in
+  `docs/plan/phase-11-drive-sync.md`). **Nothing is blocked.**
+- **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build + deployed + sync live. Optional-only work remains
+  (transcript Docs, semantic conflict tier, STT field-WER eval).
+- **Last updated:** 2026-07-01 · by `agent:opus-p11`
 - **Verified:** brain `ruff` clean + `pytest -m "not neo4j"` **62 passed** / 3 neo4j skipped; PWA
   `npm run typecheck` + **`typecheck:functions`** clean + **18 vitest** + `npm run build` installable;
   worker typecheck clean. **ElevenLabs Starter plan live-verified:** TTS→STT round-trip returned the
@@ -28,8 +28,9 @@
   Functions) so the PWA + proxy are **one git-connected Pages project**, same origin (relative
   `/llm,/stt,/tts` unchanged); `worker/` kept as an optional standalone, both importing one shared
   proxy (`pwa/functions/_shared.ts`).
-- **Next up:** **Owner: connect the repo to Cloudflare Pages once** (push to GitHub → Pages → set the 2
-  secrets → first build). Full step-by-step in **`DEPLOY.md`**. After that, updates = `git push`.
+- **Next up:** **Nothing blocked — the system is live.** Operate it: run `cli run-round` per round
+  (Answer Logs now arrive automatically via Drive sync), and `cli docgen` for the deliverable. Optional
+  enhancements only (see the P11 handoff entry).
 
 ## ▶ Resume here (start every session with this)
 
@@ -64,8 +65,9 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P8 | 8 | Sync bus + participant registry + daily cycle | DONE | agent:opus-p8 | `brain/.../bus/*` + `cycle.py` + `cli run-round` · `scripts/run-round.{sh,ps1}` · `pwa/src/sync/*` · 7 brain + 6 pwa tests · live full cycle vs Neo4j | 2026-06-29 |
 | P9 | 9 | Cross-persona corroboration + conflict threads | DONE | agent:opus-p9 | `brain/.../crosspersona.py` + planner integration + `cli corroborate` · 10 tests · live-verified vs Neo4j | 2026-06-29 |
 | P10 | 10 | Documentation generator (E2E process + SOPs + problems) | DONE | agent:opus-p10 | `brain/.../docgen/{traverse,render}.py` + `cli docgen` · 7 tests · live-verified vs Neo4j | 2026-06-29 |
+| P11 | 11 | Automatic Google Drive sync (kill manual export/import) | DONE | agent:opus-p11 | `apps-script/*` · `pwa/functions/{_sync.ts,sync/*}` · `pwa/src/sync/remote.ts` (+6 tests) · auto push/pull wired · **owner Google setup DONE + tested end-to-end** (runbook in phase-11 doc) | 2026-07-01 |
 
-**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9).
+**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry).
 
 ---
 
@@ -138,6 +140,47 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ## Handoff log (append-only · newest on top)
 
 Each entry: `### <date> · agent:<id>` then **Did / Next / Gotchas**. Never edit past entries.
+
+### 2026-07-01 · agent:opus-p11 — Phase 11 owner setup complete; P11 → DONE
+- **Did:** Owner completed the Google setup end-to-end and **tested it working**: created the Drive
+  root, deployed the Apps Script Web App (execute-as-owner / access-anyone) with `ROOT_FOLDER_ID` +
+  `SHARED_SECRET`, set the `APPS_SCRIPT_URL` + `SYNC_SHARED_SECRET` Pages secrets, and set `BUS_ROOT`.
+  **Drive-mode clarification:** the folder is on disk via **Stream mode + “Available offline”** (NOT
+  full mirror) — confirmed syncing; corrected the “must mirror” wording across `apps-script/README.md`,
+  `phase-11-drive-sync.md`, `DEPLOY.md`. Added a **self-contained deployment record + debugging runbook**
+  (request-flow trace, file map, config reference, end-to-end test, symptom→cause→fix table, hard
+  constraints) to `docs/plan/phase-11-drive-sync.md` so any future agent can debug the sync standalone.
+  Committed + pushed to GitHub `kishorgoswamibiz/Warp-Compass` (auto-deploys via Cloudflare Pages).
+- **Next:** Nothing blocked. Optional future items: transcript-Doc mirror (ADR #27b, deferred),
+  semantic batch conflict detection (ADR #23), STT field-WER eval.
+- **Gotchas:** Same as the code-complete entry below, except **(1) is corrected**: the Drive folder
+  must be **on disk** (Mirror mode OR Stream + *Available offline*), not stream-only.
+
+### 2026-07-01 · agent:opus-p11 — Phase 11 (automatic Google Drive sync); P11 → REVIEW (code complete)
+- **Did:** Removed the manual export/import — the PWA now syncs to the brain over the network, reusing
+  the P8 `FolderBus` layout so the **brain side needs zero code change**. New **`apps-script/`**
+  (`Code.gs` + `appsscript.json` + `README.md`): a Google Apps Script **Web App deployed *Execute-as:
+  me / access: anyone*** that writes/reads the owner's Drive in the exact `participants/{id}/
+  {profile.json, answer_logs/, briefs/}` layout — **so no end user ever logs into Google**. Answer logs
+  are **write-once** (immutability); `profile.json` writes **merge** (never clobber the brain's
+  `ingested_logs`). New Pages Functions **front door** (`pwa/functions/_sync.ts` +
+  `sync/{answer-log,brief}.ts`, `Env` += `APPS_SCRIPT_URL`/`SYNC_SHARED_SECRET`) forward to the Web App
+  with the shared secret injected server-side (secret off the client; also follows Apps Script's 302).
+  New PWA **`RemoteBus`** (`pwa/src/sync/remote.ts`): **auto-push** the Answer Log on session close
+  (`SessionScreen`) and **auto-pull** the latest brief on start (`App.tsx`); the manual download/import
+  stays as the offline fallback. **Verified:** PWA `typecheck` + `typecheck:functions` clean, **24
+  vitest** (+6 `remote.test.ts`), `npm run build` installable. ADR #27.
+- **Next:** **Owner one-time Google setup** (the only thing left — flips P11 REVIEW → DONE): follow the
+  7-step checklist in `apps-script/README.md` / `docs/plan/phase-11-drive-sync.md` — create the Drive
+  root, mirror via Drive-for-Desktop, deploy the Web App, set `ROOT_FOLDER_ID`+`SHARED_SECRET` script
+  props, add `APPS_SCRIPT_URL`+`SYNC_SHARED_SECRET` Pages secrets, set `BUS_ROOT` in `brain/.env`.
+- **Gotchas:** (1) **The Drive folder must be on disk, not stream-only** — either Mirror mode or Stream
+  + folder set *Available offline* (owner verified the latter). (2) **Apps Script always returns HTTP 200** (ContentService can't set status); outcomes are in
+  the JSON `ok` field and the Pages Function maps them to real status. (3) Sync only works under
+  **`npm run dev:cf`** locally (the `/sync/*` Functions aren't in the split Vite+worker mode). (4) The
+  Web App URL only changes if you create a *new* deployment — use *Manage deployments → edit → New
+  version* to keep the same `/exec` URL (else update the Cloudflare secret). (5) `BUS_ROOT` maps to
+  `Settings.bus_root` (`cli.py:174` = `args.bus or s.bus_root`), so env or `--bus` both work.
 
 ### 2026-06-29 · agent:opus-deploy — ElevenLabs verified + streamlined deploy; P7 → DONE
 - **Did:** (1) **Verified ElevenLabs on the new Starter plan** — the `402` is gone. A TTS→STT

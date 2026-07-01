@@ -7,13 +7,14 @@
  * DECISION #8). A spoken turn is: tap mic → record → `/stt` → the verbatim transcript becomes the
  * person's answer (the permanent Answer Log truth, §4) → `runner.respond` → the reply is spoken via
  * `/tts`. On a first-ever session it cold-starts with generic openers; on close it builds a
- * schema-shaped Answer Log to hand to the brain (the automated sync bus is P8).
+ * schema-shaped Answer Log and auto-pushes it to the brain over the network (Phase 11; the manual
+ * download remains as an offline fallback).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Runner, WorkerLLMProvider } from "../runner";
 import type { RunnerClock, SessionBrief } from "../runner";
-import { downloadAnswerLog, getParticipant } from "../sync";
+import { downloadAnswerLog, getParticipant, pushAnswerLog } from "../sync";
 import {
   BrowserTTSProvider,
   MicRecorder,
@@ -25,6 +26,7 @@ import {
 
 type Status = "active" | "thinking" | "paused" | "closed";
 type MicState = "idle" | "listening" | "transcribing";
+type SyncState = "idle" | "pushing" | "pushed" | "exists" | "failed";
 interface Msg {
   who: "agent" | "person" | "error";
   text: string;
@@ -60,6 +62,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<Status>("active");
   const [micState, setMicState] = useState<MicState>("idle");
+  const [syncState, setSyncState] = useState<SyncState>("idle");
   // Voice-first when a mic exists; muting only stops spoken replies, never the mic input.
   const [voiceOn, setVoiceOn] = useState(micSupported);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -174,6 +177,12 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     setMessages((m) => [...m, { who: "agent", text: bye }]);
     setStatus("closed");
     void speak(bye);
+    // Auto-push the Answer Log to the brain over the network (Phase 11). The manual download stays
+    // as the offline fallback if the push can't reach the sync endpoint.
+    setSyncState("pushing");
+    void pushAnswerLog(runner.log.build(), getParticipant())
+      .then((r) => setSyncState(r.written === false ? "exists" : "pushed"))
+      .catch(() => setSyncState("failed"));
   }, [speak]);
 
   const download = useCallback(() => {
@@ -221,14 +230,26 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
       {status === "closed" ? (
         <div className="wc-closed">
           <p className="wc-note">
-            Session captured — {entryCount} {entryCount === 1 ? "answer" : "answers"}. Download the
-            Answer Log and drop it into your <code>answer_logs/</code> folder on the shared bus — the
-            next round folds it into the brain and sends back your updated brief.
+            {syncState === "pushing" &&
+              `Saving your ${entryCount} ${entryCount === 1 ? "answer" : "answers"} to the brain…`}
+            {(syncState === "pushed" || syncState === "exists") &&
+              `Sent to the brain — ${entryCount} ${entryCount === 1 ? "answer" : "answers"} captured. The next round folds them in and your updated brief arrives here automatically.`}
+            {syncState === "failed" &&
+              `Couldn't reach the brain just now — download your Answer Log and it'll be picked up next time (or hand it to your facilitator).`}
+            {syncState === "idle" &&
+              `Session captured — ${entryCount} ${entryCount === 1 ? "answer" : "answers"}.`}
           </p>
           <div className="wc-toolbar">
-            <button className="wc-pill" onClick={download}>
-              Download Answer Log
-            </button>
+            {syncState === "failed" && (
+              <button className="wc-pill" onClick={download}>
+                Download Answer Log
+              </button>
+            )}
+            {(syncState === "pushed" || syncState === "exists") && (
+              <button className="wc-ghost" onClick={download}>
+                Download a copy
+              </button>
+            )}
             <button className="wc-ghost" onClick={onExit}>
               Done
             </button>

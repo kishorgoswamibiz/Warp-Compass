@@ -24,6 +24,8 @@ export interface Env {
   ELEVENLABS_TTS_MODEL: string; // var (e.g. eleven_flash_v2_5)
   ELEVENLABS_VOICE_ID: string; // var (a consistent voice for every user)
   ALLOWED_ORIGIN: string; // var
+  APPS_SCRIPT_URL: string; // secret (Phase 11 — the Drive-sync Web App /exec URL)
+  SYNC_SHARED_SECRET: string; // secret (Phase 11 — must match the Apps Script SHARED_SECRET)
 }
 
 export function corsHeaders(env: Env): Record<string, string> {

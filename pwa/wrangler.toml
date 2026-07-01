@@ -17,3 +17,7 @@ ALLOWED_ORIGIN = "*"                          # tighten to your Pages URL after 
 # SECRETS ARE NOT HERE. Set them once in the Cloudflare dashboard (Pages → Settings → Variables and
 # Secrets), or: `npx wrangler pages secret put DEEPSEEK_API_KEY` and `... ELEVENLABS_API_KEY`.
 # For local `wrangler pages dev`, put them in pwa/.dev.vars (git-ignored; see .dev.vars.example).
+#
+# Phase 11 (Drive sync) adds two more secrets — set them the same way:
+#   APPS_SCRIPT_URL     the deployed Apps Script Web App /exec URL (apps-script/README.md)
+#   SYNC_SHARED_SECRET  must match the SHARED_SECRET script property on that Apps Script project

@@ -111,6 +111,24 @@ GitHub-connected auto-deploy is recommended for maintenance; this is just a manu
 
 ---
 
+## Automatic Drive sync (Phase 11) — connect the phones to the brain
+
+By default users hand off Answer Logs manually. To make it automatic (push log on close, pull brief on
+start — no manual export/import), do the one-time **owner setup in `apps-script/README.md`**. In short:
+
+1. Create a Drive root folder; get it onto your laptop's disk with **Google Drive for Desktop** — either
+   *Mirror files* mode, or *Stream* mode + right-click the folder → **Available offline** (not
+   stream-only). Point the brain at it: `BUS_ROOT=<local path>` in `brain/.env` (or `cli run-round --bus`).
+2. Deploy `apps-script/Code.gs` as a **Web App** (*Execute as: Me*, *Access: Anyone*); set its
+   `ROOT_FOLDER_ID` + `SHARED_SECRET` script properties.
+3. In the Pages project add two more **secrets**: `APPS_SCRIPT_URL` (the `/exec` URL) and
+   `SYNC_SHARED_SECRET` (= the script's `SHARED_SECRET`). Same two go into `pwa/.dev.vars` for `dev:cf`.
+
+No end user logs into Google (the script runs as you). If the endpoint isn't configured or is offline,
+the PWA silently falls back to the manual download/import — nothing breaks.
+
+---
+
 ## Notes & gotchas
 - **Editing the proxy:** all `/llm` `/stt` `/tts` logic is in `pwa/functions/_shared.ts` (single
   source of truth — the route files and the standalone `worker/` both import it). Change it there.

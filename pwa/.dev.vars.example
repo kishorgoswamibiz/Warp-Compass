@@ -3,3 +3,8 @@
 # Same keys as brain/.env and worker/.dev.vars.
 DEEPSEEK_API_KEY=sk-...
 ELEVENLABS_API_KEY=...
+
+# Phase 11 — Drive sync. APPS_SCRIPT_URL is your deployed Web App /exec URL; SYNC_SHARED_SECRET must
+# match the SHARED_SECRET script property on the Apps Script project. See apps-script/README.md.
+APPS_SCRIPT_URL=https://script.google.com/macros/s/XXXX/exec
+SYNC_SHARED_SECRET=change-me-to-a-long-random-string

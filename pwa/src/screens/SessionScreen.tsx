@@ -104,6 +104,15 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   const gestureTimer = useRef<ReturnType<typeof setTimeout>>();
   const lastGlanceAt = useRef(0);
   const meterLive = useRef(false); // did real audio levels arrive this utterance?
+  // Live mirrors for async callbacks (auto-listen fires after `speak` resolves, when the
+  // closure's state may be stale — e.g. the person tapped End & save mid-utterance).
+  const statusRef = useRef<Status>("active");
+  statusRef.current = status;
+  const micStateRef = useRef<MicState>("idle");
+  micStateRef.current = micState;
+  // Hands-free loop: after the bot finishes speaking, re-arm the mic — but only when the
+  // previous answer came by voice, so typing users are never hijacked mid-thought.
+  const lastAnswerWasVoice = useRef(false);
 
   // Build the runner once and emit the opening utterance.
   useEffect(() => {
@@ -176,13 +185,30 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     [voiceOn, setMouth],
   );
 
+  // Start recording. Silent mode is the hands-free auto-arm: it must never surface an error or
+  // fire when the session moved on (guards read the live refs, not the render closure).
+  const startMic = useCallback(async (silent: boolean) => {
+    const mic = micRef.current;
+    if (!mic || statusRef.current !== "active" || micStateRef.current !== "idle") return;
+    try {
+      await mic.start();
+      setMicState("listening");
+    } catch (e) {
+      if (!silent)
+        setMessages((m) => [...m, { who: "error", text: (e as Error).message + " You can type instead." }]);
+    }
+  }, []);
+
   // Core turn: feed one answer (typed or transcribed) to the runner and surface/speak the reply.
   // The director picks how the bot acknowledges it (notes down problems, nods at people words…).
+  // A voice-given answer keeps the conversation hands-free: when the spoken reply finishes, the
+  // mic re-arms by itself (the mic button is the stop if the person wants a breather).
   const submit = useCallback(
-    async (text: string) => {
+    async (text: string, viaVoice = false) => {
       const runner = runnerRef.current;
       const t = text.trim();
       if (!runner || !t || status !== "active") return;
+      lastAnswerWasVoice.current = viaVoice;
       setInput("");
       setMessages((m) => [...m, { who: "person", text: t }]);
       setStatus("thinking");
@@ -195,7 +221,9 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         const { utterance } = await runner.respond(t);
         setMessages((m) => [...m, { who: "agent", text: utterance }]);
         setStatus("active");
-        void speak(utterance);
+        void speak(utterance).then(() => {
+          if (lastAnswerWasVoice.current && micSupported) void startMic(true);
+        });
       } catch (e) {
         setMessages((m) => [
           ...m,
@@ -204,10 +232,10 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         setStatus("active");
       }
     },
-    [status, speak, playGesture],
+    [status, speak, playGesture, startMic],
   );
 
-  const send = useCallback(() => void submit(input), [submit, input]);
+  const send = useCallback(() => void submit(input, false), [submit, input]);
 
   // While typing: if a domain keyword shows up mid-sentence, the bot visibly perks up (throttled
   // so it stays charming instead of twitchy).
@@ -225,30 +253,23 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   );
 
   // Tap to start recording; tap again to stop → transcribe → submit. The typed box stays usable.
+  // A stop with nothing said is a quiet cancel (the hands-free loop auto-arms the mic, so an
+  // intentional "not now" tap must not scold the person); it re-arms on the next spoken reply.
   const toggleMic = useCallback(async () => {
     const mic = micRef.current;
     if (!mic || status !== "active") return;
-    if (micState === "idle") {
-      try {
-        await mic.start();
-        setMicState("listening");
-      } catch (e) {
-        setMessages((m) => [...m, { who: "error", text: (e as Error).message + " You can type instead." }]);
-        setMicState("idle");
-      }
-      return;
-    }
+    if (micState === "idle") return void startMic(false);
     if (micState === "listening") {
       setMicState("transcribing");
       try {
-        const transcript = await sttRef.current.transcribe(await mic.stop());
+        const audio = await mic.stop();
+        if (audio.size === 0) {
+          setMicState("idle"); // instant cancel — nothing was recorded, nothing to say about it
+          return;
+        }
+        const transcript = await sttRef.current.transcribe(audio);
         setMicState("idle");
-        if (transcript) await submit(transcript);
-        else
-          setMessages((m) => [
-            ...m,
-            { who: "error", text: "Didn't catch that — try again or type your answer." },
-          ]);
+        if (transcript) await submit(transcript, true);
       } catch (e) {
         setMicState("idle");
         setMessages((m) => [
@@ -257,7 +278,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         ]);
       }
     }
-  }, [status, micState, submit]);
+  }, [status, micState, submit, startMic]);
 
   const endSession = useCallback(() => {
     const runner = runnerRef.current;

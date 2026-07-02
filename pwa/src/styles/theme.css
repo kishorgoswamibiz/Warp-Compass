@@ -1,6 +1,6 @@
 /* Warp Compass theme — derived from docs/assets/webapp-theme-reference.png (Warp Drive Tech).
-   Light surface with a faint grid, vivid green accent, bold near-black display headings,
-   rounded pill buttons, generous whitespace, oversized stat numerals.
+   Light surface with a subtle mint gradient, vivid green accent, bold near-black display
+   headings, rounded pill buttons, generous whitespace, oversized stat numerals.
    Tokens live here; refine exact greens by sampling the reference. See docs/THEME.md. */
 
 :root {
@@ -26,11 +26,13 @@ body {
   font-family: var(--wc-font);
   color: var(--wc-ink);
   background-color: var(--wc-bg);
-  /* faint grid, like the reference site */
+  /* subtle theme gradient: a faint green glow settling into mint (grid removed by request) */
   background-image:
-    linear-gradient(var(--wc-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--wc-line) 1px, transparent 1px);
-  background-size: 44px 44px;
+    radial-gradient(120% 55% at 50% -8%, rgba(21, 201, 91, 0.08), transparent 60%),
+    linear-gradient(172deg, #f8fcf9 0%, #f1faf4 48%, #e7f5ec 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -199,7 +201,10 @@ body {
 .wc-closed {
   position: sticky;
   bottom: 0;
-  background: var(--wc-bg);
+  /* frosted glass over the gradient (a solid patch would show a seam) */
+  background: rgba(247, 252, 249, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   padding: 12px 0 max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--wc-line);
 }

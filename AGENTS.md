@@ -30,7 +30,7 @@ by [`PROGRESS.md`](./PROGRESS.md).
 
 - The phase's own acceptance criteria are met.
 - Code is typed and linted (`uv run ruff check .` for Python; `npm run typecheck` for TS).
-- Tests for the new behavior pass (`uv run pytest`; add `-m "not neo4j"` for the no-DB subset).
+- Tests for the new behavior pass (`uv run pytest` — the whole suite runs with no services since P12).
 - The relevant **contract** in `contracts/` is honored (and updated + version-bumped if the
   contract itself changed — flag contract changes loudly in the handoff log).
 - `PROGRESS.md` is updated and a handoff entry is appended.

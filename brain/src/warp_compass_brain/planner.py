@@ -44,12 +44,17 @@ _CROSS_PERSONA_GAP_KINDS = frozenset({GapKind.ONE_SIDED_HANDOFF, GapKind.UNRESOL
 
 # Generic discovery openers for a first-ever session (empty brain). The live runner (P5) also
 # knows this list; it is the only scaffolding when there's nothing in the graph yet.
+# Ground-up + chronological by design (P12 owner feedback): the goal is the complete SOP of the
+# role, walked in order — never leading with "most difficult/frustrating part" questions.
 COLD_START_OPENERS: list[str] = [
-    "To start, tell me about your role — what are you responsible for day to day?",
-    "Walk me through a normal day, from the first thing that lands on your plate.",
-    "Where does your work come from, and where does it go when you're done?",
-    "What tools or systems do you spend the most time in?",
-    "What's the most frustrating part of the process for you right now?",
+    "To start, tell me about your role — what are you responsible for, day to day?",
+    "Let's map your day from the very beginning: what's the first piece of work that lands on "
+    "your plate, and what kicks it off?",
+    "What happens right after that? Walk me through the steps one by one, in order.",
+    "For that step — what do you need in hand to start it, and which tool or screen do you do "
+    "it in?",
+    "When that piece of work leaves your hands, who picks it up next, and how does it reach "
+    "them?",
 ]
 
 

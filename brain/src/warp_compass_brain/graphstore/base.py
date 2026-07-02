@@ -14,7 +14,7 @@ from ..models import ConfidenceStatus, Edge, EdgeType, NodeCard
 
 
 class GraphStore(ABC):
-    """Abstract knowledge-graph store. Implementations: Neo4jGraphStore (now)."""
+    """Abstract knowledge-graph store. Implementations: OkfGraphStore (Markdown bundle)."""
 
     # --- lifecycle ---
 
@@ -81,15 +81,6 @@ class GraphStore(ABC):
 
         Powers whole-graph traversals (completeness scoring, end-to-end chain check)
         that build their flow graph in memory rather than per-node round-trips.
-        """
-
-    # --- escape hatch ---
-
-    @abstractmethod
-    def query(self, cypher: str, params: dict | None = None) -> list[dict]:
-        """Run a raw query (Cypher for Neo4j) and return rows as dicts.
-
-        Used by completeness/conflict queries and the doc generator's traversals.
         """
 
     # --- convenience ---

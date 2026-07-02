@@ -1,16 +1,16 @@
 [project]
 name = "warp-compass-brain"
 version = "0.1.0"
-description = "Warp Compass — the cognition plane (laptop batch brain): extract -> resolve -> conflict/coverage -> planner over a Neo4j graph."
+description = "Warp Compass — the cognition plane (laptop batch brain): extract -> resolve -> conflict/coverage -> planner over an OKF Markdown graph bundle."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "neo4j>=5.23",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
     "openai>=1.40",
     "numpy>=1.26",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -29,9 +29,6 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-markers = [
-    "neo4j: tests that require a live Neo4j instance (skipped unless one is reachable)",
-]
 testpaths = ["tests"]
 
 [tool.ruff]

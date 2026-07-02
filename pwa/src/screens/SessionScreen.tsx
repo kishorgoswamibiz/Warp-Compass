@@ -1,19 +1,26 @@
 /**
- * SessionScreen — the live-runner UI. Voice-first as of Phase 7, with the typed path always
- * available as the fallback (mic denied / noisy / unsupported).
+ * SessionScreen — the live-runner UI. Voice-first as of Phase 7, avatar-first as of Phase 12: the
+ * default view is a "stage" where an animated avatar listens, reacts, and speaks each question,
+ * with the LLM's utterance appearing beneath it as the avatar's transcript. A chat-bubble
+ * transcript of the whole conversation is one tap away (💬) and is shown automatically at
+ * End & save so the person can review everything that was said. The typed path stays available
+ * throughout (mic denied / noisy / unsupported).
  *
  * Wraps the P5 `Runner` in the installable app. Every live call (LLM + STT + TTS) goes through the
  * Cloudflare Worker key-proxy via relative paths, so NO key ever touches the browser (AGENTS.md,
  * DECISION #8). A spoken turn is: tap mic → record → `/stt` → the verbatim transcript becomes the
  * person's answer (the permanent Answer Log truth, §4) → `runner.respond` → the reply is spoken via
- * `/tts`. On a first-ever session it cold-starts with generic openers; on close it builds a
- * schema-shaped Answer Log and auto-pushes it to the brain over the network (Phase 11; the manual
- * download remains as an offline fallback).
+ * `/tts` while the avatar lip-syncs to the audio level. The avatar layer is presentation ONLY —
+ * question generation, answer capture, and the Answer Log push are untouched. On a first-ever
+ * session it cold-starts with generic openers; on close it builds a schema-shaped Answer Log and
+ * auto-pushes it to the brain over the network (Phase 11; manual download remains as fallback).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Runner, WorkerLLMProvider } from "../runner";
 import type { RunnerClock, SessionBrief } from "../runner";
+import { Avatar, pickReaction } from "../avatar";
+import type { AvatarState } from "../avatar";
 import { downloadAnswerLog, getParticipant, pushAnswerLog } from "../sync";
 import {
   BrowserTTSProvider,
@@ -27,6 +34,7 @@ import {
 type Status = "active" | "thinking" | "paused" | "closed";
 type MicState = "idle" | "listening" | "transcribing";
 type SyncState = "idle" | "pushing" | "pushed" | "exists" | "failed";
+type View = "stage" | "chat";
 interface Msg {
   who: "agent" | "person" | "error";
   text: string;
@@ -34,6 +42,7 @@ interface Msg {
 
 const clock: RunnerClock = { now: () => new Date().toISOString() };
 const micSupported = isMicAvailable();
+const REACTION_MS = 1100;
 
 function newColdBrief(personaId: string): SessionBrief {
   const d = new Date();
@@ -63,9 +72,15 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   const [status, setStatus] = useState<Status>("active");
   const [micState, setMicState] = useState<MicState>("idle");
   const [syncState, setSyncState] = useState<SyncState>("idle");
+  const [view, setView] = useState<View>("stage");
+  const [speaking, setSpeaking] = useState(false);
+  const [reaction, setReaction] = useState<string | null>(null);
   // Voice-first when a mic exists; muting only stops spoken replies, never the mic input.
   const [voiceOn, setVoiceOn] = useState(micSupported);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const avatarRef = useRef<SVGSVGElement>(null);
+  const reactionTimer = useRef<ReturnType<typeof setTimeout>>();
+  const meterLive = useRef(false); // did real audio levels arrive this utterance?
 
   // Build the runner once and emit the opening utterance.
   useEffect(() => {
@@ -81,32 +96,56 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     setMessages([{ who: "agent", text: runner.start() }]);
     // Note: the opener isn't auto-spoken — browser autoplay needs a user gesture; replies (which
     // follow a tap) are spoken.
-    return () => micRef.current?.cancel();
+    return () => {
+      micRef.current?.cancel();
+      clearTimeout(reactionTimer.current);
+    };
   }, [brief]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, status, micState]);
+    if (view === "chat" || status === "closed")
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, status, micState, view]);
+
+  // The avatar's mouth: written straight to a CSS var on the <svg> (no React re-render per frame).
+  const setMouth = useCallback((level: number) => {
+    avatarRef.current?.style.setProperty("--wc-mouth", String(Math.max(0.12, level).toFixed(3)));
+  }, []);
 
   // Speak a reply through the Worker /tts (prod) or the platform voice (dev only, no credits).
-  // Best-effort: a TTS failure never blocks the conversation.
+  // Best-effort: a TTS failure never blocks the conversation. While audio plays the avatar is in
+  // its "speaking" state; the mouth follows the real audio level, with a synthetic wobble as the
+  // fallback when no meter is available (dev voice, or WebAudio blocked).
   const speak = useCallback(
     async (text: string) => {
       if (!voiceOn) return;
+      setSpeaking(true);
+      meterLive.current = false;
+      const synthetic = setInterval(() => {
+        if (!meterLive.current) setMouth(0.25 + Math.random() * 0.6);
+      }, 110);
       try {
         if (import.meta.env.DEV) {
           await browserTtsRef.current.speak(text);
         } else {
-          await playAudioBlob(await ttsRef.current.synthesize(text));
+          await playAudioBlob(await ttsRef.current.synthesize(text), (level) => {
+            meterLive.current = true;
+            setMouth(level);
+          });
         }
       } catch {
         /* spoken reply is optional; the text is already on screen */
+      } finally {
+        clearInterval(synthetic);
+        setMouth(0);
+        setSpeaking(false);
       }
     },
-    [voiceOn],
+    [voiceOn, setMouth],
   );
 
   // Core turn: feed one answer (typed or transcribed) to the runner and surface/speak the reply.
+  // The avatar acknowledges the answer with a micro-reaction while the runner thinks.
   const submit = useCallback(
     async (text: string) => {
       const runner = runnerRef.current;
@@ -115,6 +154,9 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
       setInput("");
       setMessages((m) => [...m, { who: "person", text: t }]);
       setStatus("thinking");
+      setReaction(pickReaction(t));
+      clearTimeout(reactionTimer.current);
+      reactionTimer.current = setTimeout(() => setReaction(null), REACTION_MS);
       try {
         const { utterance } = await runner.respond(t);
         setMessages((m) => [...m, { who: "agent", text: utterance }]);
@@ -176,6 +218,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     const bye = runner.close();
     setMessages((m) => [...m, { who: "agent", text: bye }]);
     setStatus("closed");
+    setView("chat"); // review the full conversation as a messaging thread before it's saved
     void speak(bye);
     // Auto-push the Answer Log to the brain over the network (Phase 11). The manual download stays
     // as the offline fallback if the push can't reach the sync endpoint.
@@ -197,15 +240,73 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   const micLabel =
     micState === "listening" ? "● Listening — tap to stop" : micState === "transcribing" ? "Transcribing…" : "🎤 Speak";
 
+  // What the avatar is doing right now (reactions override via the `reaction` prop).
+  const avatarState: AvatarState = speaking
+    ? "speaking"
+    : micState === "listening"
+      ? "listening"
+      : status === "thinking" || micState === "transcribing"
+        ? "thinking"
+        : "idle";
+
+  // The avatar's current line — the latest agent utterance, shown as its transcript on the stage.
+  const lastAgentIdx = messages.map((m) => m.who).lastIndexOf("agent");
+  const currentLine = lastAgentIdx >= 0 ? messages[lastAgentIdx].text : "";
+  const lastMsg = messages[messages.length - 1];
+
+  const stage = (
+    <div className="wc-stage">
+      <Avatar ref={avatarRef} state={avatarState} reaction={reaction} />
+      <p className="wc-stage-hint">
+        {micState === "listening"
+          ? "Listening to you…"
+          : micState === "transcribing"
+            ? "Catching every word…"
+            : status === "thinking"
+              ? "Thinking about what you said…"
+              : speaking
+                ? "Speaking…"
+                : " "}
+      </p>
+      {currentLine && (
+        <div className="wc-transcript" key={lastAgentIdx}>
+          {currentLine}
+        </div>
+      )}
+      {lastMsg?.who === "error" && <div className="wc-msg wc-msg-error">{lastMsg.text}</div>}
+    </div>
+  );
+
+  const chat = (
+    <div className="wc-chat" ref={scrollRef}>
+      {messages.map((m, i) => (
+        <div key={i} className={`wc-msg wc-msg-${m.who}`}>
+          {m.text}
+        </div>
+      ))}
+      {status === "thinking" && <div className="wc-msg wc-msg-agent wc-thinking">…</div>}
+      {micState === "listening" && <div className="wc-msg wc-msg-person wc-listening">●●●</div>}
+    </div>
+  );
+
   return (
     <div className="wc-session">
       <header className="wc-header">
         <span className="wc-logo">
           WARP<span className="wc-logo-thin">COMPASS</span>
         </span>
-        {micSupported && status !== "closed" && (
+        {status !== "closed" && (
           <button
             className="wc-voice-toggle"
+            onClick={() => setView((v) => (v === "stage" ? "chat" : "stage"))}
+            title={view === "stage" ? "Show the conversation transcript" : "Back to the avatar"}
+          >
+            {view === "stage" ? "💬 Transcript" : "🙂 Avatar"}
+          </button>
+        )}
+        {micSupported && status !== "closed" && (
+          <button
+            className="wc-voice-toggle wc-voice-toggle-next"
             onClick={() => setVoiceOn((v) => !v)}
             title={voiceOn ? "Mute spoken replies" : "Speak replies"}
           >
@@ -217,15 +318,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         </button>
       </header>
 
-      <div className="wc-chat" ref={scrollRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`wc-msg wc-msg-${m.who}`}>
-            {m.text}
-          </div>
-        ))}
-        {status === "thinking" && <div className="wc-msg wc-msg-agent wc-thinking">…</div>}
-        {micState === "listening" && <div className="wc-msg wc-msg-person wc-listening">●●●</div>}
-      </div>
+      {view === "chat" || status === "closed" ? chat : stage}
 
       {status === "closed" ? (
         <div className="wc-closed">

@@ -10,40 +10,37 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL PHASES DONE (P0–P11).** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL PHASES DONE (P0–P12).** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
-  connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync (live +
-  owner-tested)**. The PWA is on Cloudflare Pages (auto-deploys on `git push`), and users now reach the
-  brain with **no manual export/import** (Apps Script Web App + Drive-for-Desktop; runbook in
-  `docs/plan/phase-11-drive-sync.md`). **Nothing is blocked.**
+  connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
+  **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)**. The graph is now a
+  folder of readable Markdown files at `{BUS_ROOT}/graph` (Drive-synced); the interviewer was
+  refocused on ground-up end-to-end SOP coverage. **Nothing is blocked.**
 - **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build + deployed + sync live. Optional-only work remains
   (transcript Docs, semantic conflict tier, STT field-WER eval).
-- **Last updated:** 2026-07-01 · by `agent:opus-p11`
-- **Verified:** brain `ruff` clean + `pytest -m "not neo4j"` **62 passed** / 3 neo4j skipped; PWA
-  `npm run typecheck` + **`typecheck:functions`** clean + **18 vitest** + `npm run build` installable;
-  worker typecheck clean. **ElevenLabs Starter plan live-verified:** TTS→STT round-trip returned the
-  exact sentence — confirmed both via a direct API call and through the new **Pages Functions** (`/tts`
-  35 KB audio, `/stt` perfect transcript, `/llm` real DeepSeek completion, all served by `wrangler
-  pages dev`). **Deploy streamlined:** the key-proxy moved into **`pwa/functions/`** (Cloudflare Pages
-  Functions) so the PWA + proxy are **one git-connected Pages project**, same origin (relative
-  `/llm,/stt,/tts` unchanged); `worker/` kept as an optional standalone, both importing one shared
-  proxy (`pwa/functions/_shared.ts`).
+- **Last updated:** 2026-07-02 · by `agent:fable-p12`
+- **Verified:** brain `ruff` clean + `pytest` **72 passed** (the WHOLE suite — no DB/marker split
+  anymore); PWA `npm run typecheck` clean + **24 vitest**; `import neo4j` fails in the brain env
+  (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
+  round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
+  git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
 - **Next up:** **Nothing blocked — the system is live.** Operate it: run `cli run-round` per round
-  (Answer Logs now arrive automatically via Drive sync), and `cli docgen` for the deliverable. Optional
-  enhancements only (see the P11 handoff entry).
+  (Answer Logs arrive automatically via Drive sync), and `cli docgen` for the deliverable. If old
+  Neo4j data matters, one-off migrate: `uv run --with neo4j python ..\scripts\migrate_neo4j_to_okf.py`;
+  otherwise the graph rebuilds from Answer Logs. Neo4j Desktop can be uninstalled.
 
 ## ▶ Resume here (start every session with this)
 
-1. Open **Neo4j Desktop** → **Start** the local DB (data persists across restarts).
-2. In a terminal, **`cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"`** — uv/Python commands ONLY
+1. In a terminal, **`cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"`** — uv/Python commands ONLY
    work from this folder (running elsewhere gives `No module named 'warp_compass_brain'`).
-3. Sanity check: `uv run pytest -m "not neo4j" -q` → expect **62 passed**.
-4. **All build phases (P0–P10) are DONE.** What remains is **owner actions** only (P7 voice gate +
-   voice id; P6 Cloudflare deploy) — see *Next up*. To regenerate the deliverable: `uv run python -m
-   warp_compass_brain.cli docgen [--include-unverified] [--out FILE]`. Keys are in `brain/.env`.
-- **Build environment:** Python 3.12 + uv (`brain/`), Node 20 + npm (`pwa/`, `worker/`),
-  **Neo4j Desktop** for the local graph (no Docker — runs only on the laptop). Verify steps in
-  each package README and in `docs/10-implementation-plan.md`.
+2. Sanity check: `uv run pytest -q` → expect **72 passed** (no database needed — P12).
+3. **All build phases (P0–P12) are DONE.** Operating routine is `OPERATOR-MANUAL.md`. To regenerate
+   the deliverable: `uv run python -m warp_compass_brain.cli docgen [--include-unverified]
+   [--out FILE]`. Keys are in `brain/.env`.
+- **Build environment:** Python 3.12 + uv (`brain/`), Node 20 + npm (`pwa/`, `worker/`).
+  **No database server** — the graph is an OKF Markdown bundle at `{BUS_ROOT}/graph`
+  (`docs/plan/phase-12-okf-store.md`). Verify steps in each package README and in
+  `docs/10-implementation-plan.md`.
 
 ---
 
@@ -66,8 +63,9 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P9 | 9 | Cross-persona corroboration + conflict threads | DONE | agent:opus-p9 | `brain/.../crosspersona.py` + planner integration + `cli corroborate` · 10 tests · live-verified vs Neo4j | 2026-06-29 |
 | P10 | 10 | Documentation generator (E2E process + SOPs + problems) | DONE | agent:opus-p10 | `brain/.../docgen/{traverse,render}.py` + `cli docgen` · 7 tests · live-verified vs Neo4j | 2026-06-29 |
 | P11 | 11 | Automatic Google Drive sync (kill manual export/import) | DONE | agent:opus-p11 | `apps-script/*` · `pwa/functions/{_sync.ts,sync/*}` · `pwa/src/sync/remote.ts` (+6 tests) · auto push/pull wired · **owner Google setup DONE + tested end-to-end** (runbook in phase-11 doc) | 2026-07-01 |
+| P12 | 12 | OKF Markdown graph store — Neo4j removed; interviewer refocused on end-to-end SOP | DONE | agent:fable-p12 | `brain/.../graphstore/okf_store.py` (replaces `neo4j_store.py`) · `config.graph_root` · `scripts/migrate_neo4j_to_okf.py` · prompts (`prompts.ts`, `planner.py`, `extractor.py`) · 72 tests all-green no-DB · ADR #28 · `docs/plan/phase-12-okf-store.md` · `OKF-vs-Neo4j-report.md` | 2026-07-02 |
 
-**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry).
+**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched).
 
 ---
 
@@ -138,6 +136,37 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 2026-07-02 · agent:fable-p12 — Phase 12 (OKF graph store, Neo4j removed) + interviewer refocus; P12 → DONE
+- **Did:** (1) **Replaced Neo4j with an OKF Markdown bundle store** — new
+  `graphstore/okf_store.py` (`OkfGraphStore`): one `.md` per node under `{GRAPH_ROOT}` (default
+  `{BUS_ROOT}/graph`, i.e. Drive-synced for free); YAML frontmatter = machine truth
+  (`title`⇔canonical_name, `keywords`⇔aliases, description, status, category_codes,
+  key_attributes, provenance, **outgoing `edges` with per-edge provenance**); generated body =
+  human/LLM view (timestamped Facts + two-way `[[wiki-links]]`: Links on the giver, Backlinks on
+  the receiver — `add_edge` rewrites BOTH files). Whole bundle loads into memory on `connect()`;
+  atomic write-through; `index.md` per type regenerated on `close()`; idempotent MERGE semantics
+  kept. Deleted `neo4j_store.py`, the `neo4j` dep, `NEO4J_*` config (→ `GRAPH_ROOT`), the
+  `GraphStore.query()` Cypher escape hatch, and the `neo4j` pytest marker — **the full suite (72)
+  now runs with zero services**. One-off migration: `scripts/migrate_neo4j_to_okf.py`
+  (standalone, `uv run --with neo4j`). (2) **Interviewer refocus (owner field feedback):**
+  SYSTEM_PROMPT (pwa `prompts.ts`) now states the end goal — a complete 0→100 SOP per role —
+  with a ground-up chronological method ("what happens next?"), and forbids leading with
+  difficult/frustrating questions; COLD_START_OPENERS (mirrored in `planner.py`) rewritten as a
+  chronological walk, frustration opener removed. (3) **Extractor = active editor:** distill
+  (never transcribe), 1–3 sentence what+why descriptions, keyword identifiers, and **personal
+  names abstracted to organizational roles**. (4) Docs: ADR #28, `docs/plan/phase-12-okf-store.md`,
+  OPERATOR-MANUAL rewritten (no DB start step; "Reading the knowledge graph" section), READMEs,
+  `.env.example`. Decision analysis in `OKF-vs-Neo4j-report.md` (repo root).
+- **Next:** operate as usual (`run-round` → `corroborate --apply` → `docgen`). If old Neo4j data
+  matters, run the migration script once, else rebuild from Answer Logs (clear `ingested_logs`).
+  Neo4j Desktop can be uninstalled. Optional: sample-bundle smoke test on real engagement data.
+- **Gotchas:** (1) The graph bundle's **bodies are generated** — hand-edits get clobbered on the
+  next write; frontmatter is the truth. (2) `add_edge` silently no-ops if an endpoint id is
+  missing (same contract as the old Cypher `MATCH…MERGE`). (3) A malformed `.md` is skipped with
+  a `[okf-store] WARNING` (tolerant reads); its edges drop until fixed. (4) The old
+  `pytest -m "not neo4j"` filter is obsolete — just `uv run pytest`. (5) `vectors.sqlite` stays
+  under `brain/_state/` (local, rebuildable) — do NOT move it into the Drive folder.
 
 Each entry: `### <date> · agent:<id>` then **Did / Next / Gotchas**. Never edit past entries.
 

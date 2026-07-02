@@ -17,9 +17,10 @@ structure of the org emerge from what people actually say.
   stays on topic, follows up, and reconciles *within-session* contradictions. It holds **no
   graph**. It only **writes** an Answer Log.
 - **Cognition plane** (`brain/`) — "the brain", a batch pipeline on a laptop. It extracts
-  structured knowledge into a Neo4j graph (search-before-store), detects cross-session /
-  cross-persona conflicts, scores completeness against a fixed **ontology**, and plans each
-  persona's next focus. It only **reads** Answer Logs and **writes** Session Briefs.
+  structured knowledge into an **OKF Markdown graph bundle** (search-before-store; one readable
+  file per node, no database server), detects cross-session / cross-persona conflicts, scores
+  completeness against a fixed **ontology**, and plans each persona's next focus. It only
+  **reads** Answer Logs and **writes** Session Briefs.
 
 They communicate through two artifacts only — **Answer Log** (up) and **Session Brief** (down) —
 defined in `contracts/`. In the prototype, a free shared cloud folder (`worker/`-fronted PWA →
@@ -45,14 +46,13 @@ See `docs/assets/architecture-prototype.png` for the full topology.
 
 ## Quickstart
 
-Prerequisites: **Node 20+**, **Python 3.12+**, **[uv](https://docs.astral.sh/uv/)**, and
-**Neo4j Desktop** (free, no Docker — runs only on your laptop; see `brain/README.md`).
+Prerequisites: **Node 20+**, **Python 3.12+**, **[uv](https://docs.astral.sh/uv/)**.
+No database — the graph is a folder of Markdown files (see `brain/README.md`).
 
 ```bash
-# Brain (Phase 1 works today)
+# Brain
 cd brain && uv sync && cp .env.example .env
-# Install Neo4j Desktop, create + Start a local DB, set NEO4J_PASSWORD in .env (see brain/README.md)
-uv run pytest -m "not neo4j"         # fast tests (no DB); drop the flag once Neo4j is started
+uv run pytest                        # the whole suite; no services needed
 
 # PWA (scaffold)
 cd ../pwa && npm install && npm run dev    # http://localhost:5173
@@ -68,6 +68,7 @@ append a handoff entry when you're done. Nothing is lost between sessions.
 
 ## Status
 
-Phases **1 & 2 / 10** complete. P1 = ontology + GraphStore; P2 = the extract → resolve →
-create-gate → persist ingest pipeline (**live-verified** against DeepSeek + Neo4j). Phase 3
-(completeness engine) is next. Phases 3–10 specified and queued — see `PROGRESS.md`.
+**All phases complete (P0–P12) and deployed.** The PWA is live on Cloudflare Pages with
+automatic Google Drive sync (P11), and the knowledge graph is an OKF Markdown bundle —
+Neo4j was removed in P12 (`docs/plan/phase-12-okf-store.md`, ADR #28). Operating routine:
+`OPERATOR-MANUAL.md`. Build history: `PROGRESS.md`.

@@ -13,7 +13,7 @@ Brief. A second same-day session won't see others' input until the next round.
 2. **Export** — each phone downloads its Answer Log; the operator drops it into that participant's
    `answer_logs/` on the shared bus (manual stand-in for networked sync, DECISION #8).
 3. **Ingest + process** — `run-round` reads *all* new logs and runs the pipeline over the single
-   Neo4j graph (skipping logs already ingested — see each `profile.json`).
+   OKF graph bundle (skipping logs already ingested — see each `profile.json`).
 4. **Distribute** — the planner writes one Session Brief per persona into its `briefs/`.
 5. **Resume** — each phone imports its latest brief; the next session is cross-pollinated.
 
@@ -26,8 +26,9 @@ scripts/run-round.sh --session s_2026_0630
 # Or directly (from brain/):
 uv run python -m warp_compass_brain.cli run-round --session s_2026_0630 [--bus <path>]
 ```
-Prereqs: **Neo4j Desktop Started**; `brain/.env` has the DeepSeek key. The bus defaults to
-`settings.bus_root` (`brain/_bus`); pass `--bus` to point at the shared folder.
+Prereqs: `brain/.env` has the DeepSeek key (no database to start — P12). The bus defaults to
+`settings.bus_root` (`brain/_bus`); pass `--bus` to point at the shared folder. The graph bundle
+lives at `{bus_root}/graph` unless `GRAPH_ROOT` overrides it.
 
 ## Shared-folder (bus) layout — the user registry
 ```
@@ -42,3 +43,5 @@ automatically on first sight and records which logs are already ingested (the re
 
 ## Files
 - `run-round.sh` / `run-round.ps1` — one collect→register→ingest→plan→distribute round (Phase 8).
+- `migrate_neo4j_to_okf.py` — one-off copy of a pre-P12 Neo4j graph into the OKF bundle
+  (`uv run --with neo4j python ..\scripts\migrate_neo4j_to_okf.py` from `brain/`).

@@ -52,10 +52,15 @@ export class WorkerTTSProvider implements TTSProvider {
  * Play an audio blob and resolve when it finishes (or rejects on a playback error). Used by the UI
  * to speak a Worker-synthesized reply. Kept here so the audio lifecycle (object URL create/revoke)
  * lives in one place.
+ *
+ * `onLevel` (optional, Phase 12) receives a smoothed 0–1 loudness reading ~60×/s while the audio
+ * plays — the avatar drives its mouth from it. Metering is best-effort: if WebAudio is unavailable
+ * or blocked, playback proceeds normally and `onLevel` simply never fires.
  */
-export async function playAudioBlob(blob: Blob): Promise<void> {
+export async function playAudioBlob(blob: Blob, onLevel?: (level: number) => void): Promise<void> {
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  const stopMeter = onLevel ? attachLevelMeter(audio, onLevel) : undefined;
   try {
     await new Promise<void>((resolve, reject) => {
       audio.onended = () => resolve();
@@ -63,7 +68,48 @@ export async function playAudioBlob(blob: Blob): Promise<void> {
       void audio.play().catch(reject);
     });
   } finally {
+    stopMeter?.();
     URL.revokeObjectURL(url);
+  }
+}
+
+// One shared AudioContext: browsers cap how many a page may create, and TTS replies are frequent.
+let meterCtx: AudioContext | undefined;
+
+/** Route `audio` through an AnalyserNode and stream smoothed 0–1 levels to `onLevel`. */
+function attachLevelMeter(audio: HTMLAudioElement, onLevel: (level: number) => void): () => void {
+  try {
+    meterCtx ??= new AudioContext();
+    if (meterCtx.state === "suspended") void meterCtx.resume();
+    const source = meterCtx.createMediaElementSource(audio);
+    const analyser = meterCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyser.connect(meterCtx.destination); // MediaElementSource captures output; re-route to speakers
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    let raf = 0;
+    let smooth = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(buf);
+      let peak = 0;
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+      smooth = smooth * 0.6 + Math.min(1, (peak / 128) * 1.6) * 0.4;
+      onLevel(smooth);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      onLevel(0);
+      try {
+        source.disconnect();
+        analyser.disconnect();
+      } catch {
+        /* already torn down */
+      }
+    };
+  } catch {
+    return () => onLevel(0); // no metering — the avatar falls back to its CSS talk loop
   }
 }
 

@@ -30,7 +30,17 @@ Rules:
 - Use ONLY the allowed node types and edge types. Never invent types.
 - Each node needs a unique "ref" (n1, n2, ...) used by relations.
 - Prefer FEWER, well-formed nodes over many noisy ones.
-- canonical_name is a short normalized name; put surface variants in aliases.
+- Be an ACTIVE EDITOR, never a transcriber: distill what was said into clean factual
+  statements. Never copy conversational text ("well, usually I kind of...") into any field.
+- canonical_name is a short normalized name (2-4 words); aliases are the OTHER keywords or
+  surface variants people use for the same thing. Together they are the node's identifier —
+  write them so a later reader can decide at a glance whether a new mention is this node.
+- description is 1-3 plain factual sentences: WHAT this is and WHY it exists in the process
+  (its purpose or place in the flow). No filler, no first person, no quotes.
+- ABSTRACT PEOPLE INTO ROLES: never emit a personal name ("John", "Priya ma'am") as a node
+  or inside any field. Name the organizational role that person plays, inferred from what
+  they do in the answer (e.g. "John approves my discounts" -> a Role like "Discount Approver"
+  or their stated title). People change; roles persist.
 - Only emit category_codes that are in the allowed list; if unsure, leave it empty.
 - A relation's endpoints must obey the edge's (from_type -> to_type) direction.
 - If the answer contains no process knowledge, return {"nodes":[],"relations":[]}.

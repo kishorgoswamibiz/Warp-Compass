@@ -1,5 +1,5 @@
 """Shared test doubles: an in-memory GraphStore and a scripted LLM, so the Phase-2 pipeline
-is fully testable without Neo4j or any network."""
+is fully testable without touching disk or any network."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from warp_compass_brain.models import (
 
 
 class FakeGraphStore(GraphStore):
-    """Dict-backed store that mimics Neo4j semantics (returns fresh copies on read)."""
+    """Dict-backed store that mimics OkfGraphStore semantics (returns fresh copies on read)."""
 
     def __init__(self) -> None:
         self.nodes: dict[str, NodeCard] = {}
@@ -58,7 +58,7 @@ class FakeGraphStore(GraphStore):
             n.provenance[-1].status = status
 
     def add_edge(self, edge: Edge) -> None:
-        # Idempotent MERGE on (type, from, to), mirroring Neo4jGraphStore: re-adding an edge
+        # Idempotent MERGE on (type, from, to), mirroring OkfGraphStore: re-adding an edge
         # overwrites its provenance rather than creating a duplicate relationship.
         for i, e in enumerate(self._edges):
             if e.type == edge.type and e.from_id == edge.from_id and e.to_id == edge.to_id:
@@ -86,9 +86,6 @@ class FakeGraphStore(GraphStore):
             for e in self._edges
             if edge_type is None or e.type == edge_type
         ]
-
-    def query(self, cypher: str, params: dict | None = None) -> list[dict]:
-        return []
 
 
 class FakeLLM(LLMProvider):

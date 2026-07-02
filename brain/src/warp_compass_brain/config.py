@@ -12,11 +12,10 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # --- Neo4j (the unified graph) ---
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "warpcompass"
-    neo4j_database: str = "neo4j"
+    # --- The unified graph: an OKF Markdown bundle (P12). Empty = {bus_root}/graph, i.e.
+    # inside the Drive-synced engagement folder, so the knowledge base syncs/backs up for free.
+    # Set GRAPH_ROOT in brain/.env to override (e.g. keep the graph local-only). ---
+    graph_root: str = ""
 
     # --- Paid APIs. For LIVE calls keys live only in the Worker, never the browser;
     # these brain-side keys are for batch use (extraction/adjudication). ---
@@ -58,3 +57,12 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     return Settings()
+
+
+def resolve_graph_root(settings: Settings) -> str:
+    """Where the OKF graph bundle lives: GRAPH_ROOT if set, else ``{bus_root}/graph``."""
+    if settings.graph_root:
+        return settings.graph_root
+    from pathlib import Path
+
+    return str(Path(settings.bus_root) / "graph")

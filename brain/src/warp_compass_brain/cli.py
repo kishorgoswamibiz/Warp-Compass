@@ -12,7 +12,15 @@ import json
 import sys
 from datetime import UTC
 
-from .config import get_settings
+from .config import get_settings, resolve_graph_root
+
+
+def _open_graph(settings):
+    from .graphstore.okf_store import OkfGraphStore
+
+    graph = OkfGraphStore(resolve_graph_root(settings))
+    graph.connect()
+    return graph
 
 # Windows consoles default to cp1252, which can't encode characters that appear in node
 # names or JSON output. Force UTF-8 so the CLI never crashes on a stray unicode glyph.
@@ -64,7 +72,6 @@ def cmd_extract(args) -> int:
 def _build_ingestor(settings):
     from .create_gate import CreateGate
     from .extractor import Extractor
-    from .graphstore.neo4j_store import Neo4jGraphStore
     from .ingest import Ingestor
     from .llm.deepseek import DeepSeekProvider
     from .ontology import load_ontology
@@ -73,8 +80,7 @@ def _build_ingestor(settings):
     from .vectorindex.embedder import get_embedder
     from .vectorindex.local_index import LocalVectorIndex
 
-    graph = Neo4jGraphStore(settings)
-    graph.connect()
+    graph = _open_graph(settings)
     ont = load_ontology()
     llm = DeepSeekProvider(settings)
     vector = LocalVectorIndex(settings.vector_db_path, get_embedder(settings.embedding_model))
@@ -187,13 +193,11 @@ def cmd_completeness(args) -> int:
     from dataclasses import asdict
 
     from .completeness import CompletenessEngine
-    from .graphstore.neo4j_store import Neo4jGraphStore
     from .ontology import load_ontology
     from .threads import build_threads
 
     s = get_settings()
-    graph = Neo4jGraphStore(s)
-    graph.connect()
+    graph = _open_graph(s)
     try:
         engine = CompletenessEngine(
             graph,
@@ -235,12 +239,10 @@ def cmd_docgen(args) -> int:
     Write to a file with --out, else prints to stdout.
     """
     from .docgen import DocGenerator, render_markdown
-    from .graphstore.neo4j_store import Neo4jGraphStore
     from .ontology import load_ontology
 
     s = get_settings()
-    graph = Neo4jGraphStore(s)
-    graph.connect()
+    graph = _open_graph(s)
     try:
         docs = DocGenerator(
             graph, load_ontology(), include_unverified=args.include_unverified
@@ -268,12 +270,10 @@ def cmd_corroborate(args) -> int:
     from collections import Counter
 
     from .crosspersona import CrossPersonaEngine
-    from .graphstore.neo4j_store import Neo4jGraphStore
     from .ontology import load_ontology
 
     s = get_settings()
-    graph = Neo4jGraphStore(s)
-    graph.connect()
+    graph = _open_graph(s)
     try:
         engine = CrossPersonaEngine(graph, load_ontology(), now=_now())
         report = engine.assess()
@@ -306,13 +306,11 @@ def cmd_corroborate(args) -> int:
 
 
 def cmd_plan(args) -> int:
-    from .graphstore.neo4j_store import Neo4jGraphStore
     from .ontology import load_ontology
     from .planner import Planner
 
     s = get_settings()
-    graph = Neo4jGraphStore(s)
-    graph.connect()
+    graph = _open_graph(s)
     try:
         planner = Planner(
             graph, load_ontology(), max_threads=s.planner_max_threads, now=_now()
@@ -341,28 +339,28 @@ def main(argv: list[str] | None = None) -> int:
     pe.add_argument("text")
     pe.set_defaults(func=cmd_extract)
 
-    pi = sub.add_parser("ingest", help="full pipeline extract->resolve->gate->persist (Neo4j)")
+    pi = sub.add_parser("ingest", help="full pipeline extract->resolve->gate->persist (OKF graph)")
     pi.add_argument("text")
     pi.add_argument("--persona", default="persona.demo")
     pi.add_argument("--session", default="s_demo")
     pi.set_defaults(func=cmd_ingest)
 
     pil = sub.add_parser(
-        "ingest-log", help="ingest a runner Answer Log file (each entry's raw_answer) (Neo4j)"
+        "ingest-log", help="ingest a runner Answer Log file (each entry's raw_answer) (OKF graph)"
     )
     pil.add_argument("path", help="path to an answer-log JSON file written by the runner")
     pil.set_defaults(func=cmd_ingest_log)
 
     pr = sub.add_parser(
         "run-round",
-        help="one daily cycle over the bus: register, ingest new logs, plan, distribute (Neo4j)",
+        help="one daily cycle over the bus: register, ingest new logs, plan, distribute",
     )
     pr.add_argument("--bus", default=None, help="bus root (default: settings.bus_root)")
     pr.add_argument("--session", default="s_next", help="session_id stamped on the emitted briefs")
     pr.set_defaults(func=cmd_run_round)
 
     pc = sub.add_parser(
-        "completeness", help="score the graph vs the ontology + list open threads (Neo4j)"
+        "completeness", help="score the graph vs the ontology + list open threads (OKF graph)"
     )
     pc.add_argument(
         "--threads", action="store_true", help="include the prioritized open-thread list"
@@ -382,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
 
     pdoc = sub.add_parser(
         "docgen",
-        help="generate the living docs (E2E process + SOPs + problem register) as Markdown (Neo4j)",
+        help="generate the living docs (E2E process + SOPs + problem register) as Markdown",
     )
     pdoc.add_argument(
         "--include-unverified",
@@ -393,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
     pdoc.set_defaults(func=cmd_docgen)
 
     pp = sub.add_parser(
-        "plan", help="emit per-persona Session Brief(s) from the live graph (Neo4j)"
+        "plan", help="emit per-persona Session Brief(s) from the live graph (OKF graph)"
     )
     pp.add_argument(
         "--persona", default=None, help="a single persona_id; omit to plan for all personas"

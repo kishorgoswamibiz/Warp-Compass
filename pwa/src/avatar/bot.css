@@ -1,0 +1,565 @@
+/* WarpBot — all expression & gesture animation. Transform/opacity only (compositor-cheap).
+   Layering: base motion (levitation, orbits) → state faces ([data-state]) → one-shot gestures
+   ([data-gesture], later in the file so they win the cascade). The mouth equalizer is the one
+   JS-driven part: it scales with --wc-mouth (live TTS audio level, set by the session screen). */
+
+.wc-bot-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.wc-bot {
+  width: clamp(200px, 60vw, 290px);
+  height: auto;
+  overflow: visible;
+}
+
+/* every animated part rotates/scales about its own box */
+.wc-bot g,
+.wc-bot rect,
+.wc-bot path,
+.wc-bot circle,
+.wc-bot ellipse {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ── ambient motion: never fully still ─────────────────────────────────────── */
+.wc-bot-orbit {
+  fill: none;
+  stroke: #15c95b;
+  stroke-linecap: round;
+}
+.wc-bot-orbit-1 {
+  stroke-width: 1.6;
+  stroke-dasharray: 0.1 10;
+  opacity: 0.35;
+  animation: wc-bot-spin 40s linear infinite;
+}
+.wc-bot-orbit-2 {
+  stroke-width: 1.4;
+  stroke-dasharray: 0.1 14;
+  opacity: 0.18;
+  animation: wc-bot-spin 60s linear infinite reverse;
+}
+@keyframes wc-bot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wc-bot-head {
+  animation: wc-bot-float 3.6s ease-in-out infinite;
+}
+@keyframes wc-bot-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-6px) rotate(-1.2deg);
+  }
+  65% {
+    transform: translateY(-2px) rotate(1deg);
+  }
+}
+.wc-bot-shadow {
+  animation: wc-bot-shadow 3.6s ease-in-out infinite;
+}
+@keyframes wc-bot-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  30% {
+    transform: scaleX(0.85);
+    opacity: 0.7;
+  }
+  65% {
+    transform: scaleX(0.94);
+    opacity: 0.85;
+  }
+}
+.wc-bot-ringglow {
+  animation: wc-bot-charge 2.4s ease-in-out infinite;
+}
+@keyframes wc-bot-charge {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+/* ── the face: neon-green features on the screen ───────────────────────────── */
+.wc-bot-face {
+  filter: drop-shadow(0 0 5px rgba(46, 232, 120, 0.75));
+}
+.wc-bot-eye-arc,
+.wc-bot-smile {
+  fill: none;
+  stroke: #35f27f;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+.wc-bot-eye-round,
+.wc-bot-o,
+.wc-bot-dots circle,
+.wc-bot-bar {
+  fill: #35f27f;
+}
+.wc-bot-eye-arc,
+.wc-bot-eye-round,
+.wc-bot-smile,
+.wc-bot-o,
+.wc-bot-dots,
+.wc-bot-wave {
+  transition: opacity 0.22s ease, transform 0.25s ease;
+}
+/* default (idle) face: happy arcs + smile, like the reference */
+.wc-bot-eye-round,
+.wc-bot-o,
+.wc-bot-dots,
+.wc-bot-wave {
+  opacity: 0;
+}
+
+/* idle life: every ~9s the arcs open into round eyes that glance around */
+.wc-bot[data-state="idle"] .wc-bot-eye-arc {
+  animation: wc-bot-idle-arc 9s ease-in-out infinite;
+}
+.wc-bot[data-state="idle"] .wc-bot-eye-round {
+  animation: wc-bot-idle-round 9s ease-in-out infinite;
+}
+@keyframes wc-bot-idle-arc {
+  0%,
+  55%,
+  76%,
+  100% {
+    opacity: 1;
+  }
+  58%,
+  73% {
+    opacity: 0;
+  }
+}
+@keyframes wc-bot-idle-round {
+  0%,
+  55%,
+  76%,
+  100% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  58%,
+  62% {
+    opacity: 1;
+    transform: translate(-4px, 1px);
+  }
+  66%,
+  73% {
+    opacity: 1;
+    transform: translate(4px, -2px);
+  }
+}
+/* the smile perks up now and then */
+.wc-bot[data-state="idle"] .wc-bot-smile {
+  animation: wc-bot-idle-smile 9s ease-in-out infinite;
+}
+@keyframes wc-bot-idle-smile {
+  0%,
+  50%,
+  100% {
+    transform: scaleX(1);
+  }
+  58%,
+  73% {
+    transform: scaleX(0.75);
+  }
+}
+
+/* ── listening: round attentive eyes, pods pulsing, leaning toward you ─────── */
+.wc-bot[data-state="listening"] .wc-bot-eye-arc {
+  opacity: 0;
+}
+.wc-bot[data-state="listening"] .wc-bot-eye-round {
+  opacity: 1;
+  animation: wc-bot-blink 3.8s ease-in-out infinite;
+}
+@keyframes wc-bot-blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+  }
+  93%,
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+.wc-bot[data-state="listening"] .wc-bot-smile {
+  transform: scaleX(0.65);
+}
+.wc-bot[data-state="listening"] .wc-bot-head {
+  animation: wc-bot-lean-loop 3s ease-in-out infinite;
+}
+@keyframes wc-bot-lean-loop {
+  0%,
+  100% {
+    transform: translateY(3px) scale(1.05) rotate(2deg);
+  }
+  45% {
+    transform: translateY(6px) scale(1.06) rotate(2.5deg); /* little "go on…" nod */
+  }
+  60% {
+    transform: translateY(3px) scale(1.05) rotate(2deg);
+  }
+}
+.wc-bot[data-state="listening"] .wc-bot-podlight {
+  animation: wc-bot-podpulse 1.1s ease-in-out infinite;
+}
+@keyframes wc-bot-podpulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scaleY(0.6);
+  }
+}
+
+/* ── thinking: eyes drift up, dots tick like a tiny loader ─────────────────── */
+.wc-bot[data-state="thinking"] .wc-bot-eye-arc,
+.wc-bot[data-state="thinking"] .wc-bot-smile {
+  opacity: 0;
+}
+.wc-bot[data-state="thinking"] .wc-bot-eye-round {
+  opacity: 1;
+  transform: translate(4px, -5px) scale(0.85);
+}
+.wc-bot[data-state="thinking"] .wc-bot-dots {
+  opacity: 1;
+}
+.wc-bot[data-state="thinking"] .wc-bot-dots circle {
+  animation: wc-bot-tick 1.1s ease-in-out infinite;
+}
+.wc-bot[data-state="thinking"] .wc-bot-dots circle:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.wc-bot[data-state="thinking"] .wc-bot-dots circle:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes wc-bot-tick {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.wc-bot[data-state="thinking"] .wc-bot-head {
+  animation: wc-bot-ponder 3s ease-in-out infinite;
+}
+@keyframes wc-bot-ponder {
+  0%,
+  100% {
+    transform: translateY(-2px) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(-4deg);
+  }
+}
+
+/* ── speaking: happy arcs + audio-reactive equalizer mouth ─────────────────── */
+.wc-bot[data-state="speaking"] .wc-bot-smile {
+  opacity: 0;
+}
+.wc-bot[data-state="speaking"] .wc-bot-wave {
+  opacity: 1;
+  transform: scaleY(calc(0.3 + var(--wc-mouth, 0.4) * 0.7));
+  transition: transform 0.07s linear;
+}
+.wc-bot[data-state="speaking"] .wc-bot-bar {
+  animation: wc-bot-bar 0.62s ease-in-out infinite;
+}
+.wc-bot[data-state="speaking"] .wc-bot-bar:nth-child(1) {
+  animation-delay: 0.08s;
+}
+.wc-bot[data-state="speaking"] .wc-bot-bar:nth-child(2) {
+  animation-delay: 0.24s;
+}
+.wc-bot[data-state="speaking"] .wc-bot-bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.wc-bot[data-state="speaking"] .wc-bot-bar:nth-child(5) {
+  animation-delay: 0.14s;
+}
+@keyframes wc-bot-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.wc-bot[data-state="speaking"] .wc-bot-head {
+  animation: wc-bot-talk 1.4s ease-in-out infinite;
+}
+@keyframes wc-bot-talk {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0.6deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-0.6deg);
+  }
+}
+.wc-bot[data-state="speaking"] .wc-bot-ringglow {
+  animation-duration: 1.2s; /* the charge ring dances faster while talking */
+}
+
+/* ── one-shot gestures (director-driven; override the state face) ──────────── */
+
+/* nod: "yes, I follow" — two firm dips */
+.wc-bot[data-gesture="nod"] .wc-bot-head {
+  animation: wc-bot-nod 1.5s ease-in-out;
+}
+@keyframes wc-bot-nod {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  20% {
+    transform: translateY(7px) rotate(3deg);
+  }
+  40% {
+    transform: translateY(-2px) rotate(0deg);
+  }
+  60% {
+    transform: translateY(7px) rotate(3deg);
+  }
+  80% {
+    transform: translateY(-1px) rotate(0deg);
+  }
+}
+
+/* lean: comes close to catch every word (keyword-triggered while you type) */
+.wc-bot[data-gesture="lean"] .wc-bot-head {
+  animation: wc-bot-leanin 1.8s ease-in-out;
+}
+@keyframes wc-bot-leanin {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  25%,
+  75% {
+    transform: translateY(9px) scale(1.12) rotate(2deg);
+  }
+}
+.wc-bot[data-gesture="lean"] .wc-bot-eye-arc {
+  opacity: 0;
+}
+.wc-bot[data-gesture="lean"] .wc-bot-eye-round {
+  opacity: 1;
+  transform: scale(1.15);
+}
+.wc-bot[data-gesture="lean"] .wc-bot-podlight {
+  animation: wc-bot-podpulse 0.7s ease-in-out infinite;
+}
+
+/* peek: curious head-cock, one eye wide */
+.wc-bot[data-gesture="peek"] .wc-bot-head {
+  animation: wc-bot-peek 2.2s ease-in-out;
+}
+@keyframes wc-bot-peek {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25%,
+  80% {
+    transform: rotate(8deg) translateY(-2px);
+  }
+}
+.wc-bot[data-gesture="peek"] .wc-bot-eye-l .wc-bot-eye-arc {
+  opacity: 0;
+}
+.wc-bot[data-gesture="peek"] .wc-bot-eye-l .wc-bot-eye-round {
+  opacity: 1;
+  transform: scale(1.35);
+}
+.wc-bot[data-gesture="peek"] .wc-bot-smile {
+  transform: scaleX(0.6) translateX(4px);
+}
+
+/* spin: pods whirl + a quick wobble — the random "is it… dancing?" beat */
+.wc-bot[data-gesture="spin"] .wc-bot-pod {
+  animation: wc-bot-podspin 1.2s ease-in-out;
+}
+@keyframes wc-bot-podspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.wc-bot[data-gesture="spin"] .wc-bot-head {
+  animation: wc-bot-wobble 1.2s ease-in-out;
+}
+@keyframes wc-bot-wobble {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
+  75% {
+    transform: rotate(-3deg);
+  }
+}
+
+/* happy: deeper arcs + a joyful bounce */
+.wc-bot[data-gesture="happy"] .wc-bot-head {
+  animation: wc-bot-bounce 1.3s ease-in-out;
+}
+@keyframes wc-bot-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-12px) scale(1.05);
+  }
+  55% {
+    transform: translateY(0) scale(0.98);
+  }
+  70% {
+    transform: translateY(-5px) scale(1.02);
+  }
+}
+.wc-bot[data-gesture="happy"] .wc-bot-eye-arc {
+  transform: scaleY(1.25);
+}
+
+/* concern: arcs tip into a worried slant, smile flips down */
+.wc-bot[data-gesture="concern"] .wc-bot-eye-l .wc-bot-eye-arc {
+  transform: rotate(10deg) translateY(1px);
+}
+.wc-bot[data-gesture="concern"] .wc-bot-eye-r .wc-bot-eye-arc {
+  transform: rotate(-10deg) translateY(1px);
+}
+.wc-bot[data-gesture="concern"] .wc-bot-smile {
+  transform: scaleY(-0.8) scaleX(0.8) translateY(-4px);
+}
+.wc-bot[data-gesture="concern"] .wc-bot-head {
+  animation: wc-bot-ponder 2.4s ease-in-out;
+}
+
+/* note: the arm pops out and scribbles — problems get written down */
+.wc-bot-arm {
+  opacity: 0;
+  transform: translate(10px, 16px) scale(0.6);
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wc-bot[data-gesture="note"] .wc-bot-arm {
+  opacity: 1;
+  transform: translate(0, 0) scale(1);
+}
+.wc-bot-scribble {
+  fill: none;
+  stroke: #15c95b;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+}
+.wc-bot[data-gesture="note"] .wc-bot-scribble-1 {
+  animation: wc-bot-write 0.7s ease-out 0.3s forwards;
+}
+.wc-bot[data-gesture="note"] .wc-bot-scribble-2 {
+  animation: wc-bot-write 0.7s ease-out 0.9s forwards;
+}
+.wc-bot[data-gesture="note"] .wc-bot-scribble-3 {
+  animation: wc-bot-write 0.7s ease-out 1.5s forwards;
+}
+@keyframes wc-bot-write {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.wc-bot[data-gesture="note"] .wc-bot-pen {
+  animation: wc-bot-penwiggle 0.45s ease-in-out 0.3s 4;
+}
+@keyframes wc-bot-penwiggle {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(2px, 1.5px) rotate(4deg);
+  }
+}
+/* it glances down at its notes while writing */
+.wc-bot[data-gesture="note"] .wc-bot-eye-arc {
+  opacity: 0;
+}
+.wc-bot[data-gesture="note"] .wc-bot-eye-round {
+  opacity: 1;
+  transform: translate(6px, 5px) scale(0.9);
+}
+.wc-bot[data-gesture="note"] .wc-bot-head {
+  animation: wc-bot-notetilt 2.6s ease-in-out;
+}
+@keyframes wc-bot-notetilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20%,
+  85% {
+    transform: rotate(4deg) translateY(2px);
+  }
+}
+
+/* reaction bubble above the head — space reserved so nothing jumps */
+.wc-bot-bubble {
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(12, 15, 13, 0.07);
+  box-shadow: 0 6px 18px rgba(12, 15, 13, 0.07);
+  font-size: 15px;
+  font-weight: 700;
+  color: #0c0f0d;
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.wc-bot-bubble-on {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wc-bot *,
+  .wc-bot-bubble {
+    animation: none !important;
+    transition: none !important;
+  }
+}

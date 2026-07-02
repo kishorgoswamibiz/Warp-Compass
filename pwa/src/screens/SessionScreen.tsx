@@ -1,26 +1,29 @@
 /**
- * SessionScreen — the live-runner UI. Voice-first as of Phase 7, avatar-first as of Phase 12: the
- * default view is a "stage" where an animated avatar listens, reacts, and speaks each question,
- * with the LLM's utterance appearing beneath it as the avatar's transcript. A chat-bubble
- * transcript of the whole conversation is one tap away (💬) and is shown automatically at
- * End & save so the person can review everything that was said. The typed path stays available
- * throughout (mic denied / noisy / unsupported).
+ * SessionScreen — the live-runner UI. Voice-first as of Phase 7, bot-first as of Phase 12: the
+ * default view is a "stage" where the WarpBot robot listens, reacts, and speaks each question,
+ * with the LLM's utterance appearing beneath it as the bot's transcript (plus topic chips, per
+ * the PWA Bot Sample reference). A chat-bubble transcript of the whole conversation is one tap
+ * away (💬) and is shown automatically at End & save. The typed path stays available throughout.
+ *
+ * Liveliness is director-driven (src/avatar/director.ts): keyword-triggered gestures on submit
+ * AND while typing (the bot leans in when it spots process words, writes problems on its notepad),
+ * plus random idle antics so it never freezes. All of it is presentation ONLY — question
+ * generation, answer capture, and the Answer Log push are untouched.
  *
  * Wraps the P5 `Runner` in the installable app. Every live call (LLM + STT + TTS) goes through the
  * Cloudflare Worker key-proxy via relative paths, so NO key ever touches the browser (AGENTS.md,
  * DECISION #8). A spoken turn is: tap mic → record → `/stt` → the verbatim transcript becomes the
  * person's answer (the permanent Answer Log truth, §4) → `runner.respond` → the reply is spoken via
- * `/tts` while the avatar lip-syncs to the audio level. The avatar layer is presentation ONLY —
- * question generation, answer capture, and the Answer Log push are untouched. On a first-ever
- * session it cold-starts with generic openers; on close it builds a schema-shaped Answer Log and
- * auto-pushes it to the brain over the network (Phase 11; manual download remains as fallback).
+ * `/tts` while the bot's equalizer mouth tracks the audio level. On a first-ever session it
+ * cold-starts with generic openers; on close it builds a schema-shaped Answer Log and auto-pushes
+ * it to the brain (Phase 11; manual download remains as the offline fallback).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Runner, WorkerLLMProvider } from "../runner";
 import type { RunnerClock, SessionBrief } from "../runner";
-import { Avatar, pickReaction } from "../avatar";
-import type { AvatarState } from "../avatar";
+import { WarpBot, chipsFor, glanceAt, reactToAnswer, useIdleAntics } from "../avatar";
+import type { BotGesture, BotState } from "../avatar";
 import { downloadAnswerLog, getParticipant, pushAnswerLog } from "../sync";
 import {
   BrowserTTSProvider,
@@ -42,7 +45,23 @@ interface Msg {
 
 const clock: RunnerClock = { now: () => new Date().toISOString() };
 const micSupported = isMicAvailable();
-const REACTION_MS = 1100;
+const REACTION_MS = 1500;
+const GLANCE_COOLDOWN_MS = 8000;
+
+/** What tapping a topic chip drops into the input as a sentence starter. */
+const CHIP_STARTERS: Record<string, string> = {
+  "My role": "My role is ",
+  "Daily tasks": "On a typical day, I ",
+  "Key responsibilities": "I'm responsible for ",
+  "Pain points": "The biggest problem is ",
+  "Tools & systems": "We use ",
+  "The process": "It starts when ",
+  "People & handoffs": "After me, it goes to ",
+  Approvals: "It needs approval from ",
+  "When it happens": "It happens every ",
+  Numbers: "Roughly ",
+  Wishes: "I wish ",
+};
 
 function newColdBrief(personaId: string): SessionBrief {
   const d = new Date();
@@ -75,11 +94,15 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   const [view, setView] = useState<View>("stage");
   const [speaking, setSpeaking] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
+  const [gesture, setGesture] = useState<BotGesture | null>(null);
   // Voice-first when a mic exists; muting only stops spoken replies, never the mic input.
   const [voiceOn, setVoiceOn] = useState(micSupported);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const avatarRef = useRef<SVGSVGElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const botRef = useRef<SVGSVGElement>(null);
   const reactionTimer = useRef<ReturnType<typeof setTimeout>>();
+  const gestureTimer = useRef<ReturnType<typeof setTimeout>>();
+  const lastGlanceAt = useRef(0);
   const meterLive = useRef(false); // did real audio levels arrive this utterance?
 
   // Build the runner once and emit the opening utterance.
@@ -99,6 +122,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     return () => {
       micRef.current?.cancel();
       clearTimeout(reactionTimer.current);
+      clearTimeout(gestureTimer.current);
     };
   }, [brief]);
 
@@ -107,15 +131,23 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, status, micState, view]);
 
-  // The avatar's mouth: written straight to a CSS var on the <svg> (no React re-render per frame).
+  // One-shot act on top of the current state; a new gesture replaces the running one.
+  const playGesture = useCallback((g: BotGesture, ms = 2600) => {
+    clearTimeout(gestureTimer.current);
+    setGesture(null); // retrigger CSS animations even for the same gesture twice
+    requestAnimationFrame(() => setGesture(g));
+    gestureTimer.current = setTimeout(() => setGesture(null), ms);
+  }, []);
+
+  // The bot's equalizer mouth: written straight to a CSS var on the <svg> (no re-render per frame).
   const setMouth = useCallback((level: number) => {
-    avatarRef.current?.style.setProperty("--wc-mouth", String(Math.max(0.12, level).toFixed(3)));
+    botRef.current?.style.setProperty("--wc-mouth", String(Math.max(0.12, level).toFixed(3)));
   }, []);
 
   // Speak a reply through the Worker /tts (prod) or the platform voice (dev only, no credits).
-  // Best-effort: a TTS failure never blocks the conversation. While audio plays the avatar is in
-  // its "speaking" state; the mouth follows the real audio level, with a synthetic wobble as the
-  // fallback when no meter is available (dev voice, or WebAudio blocked).
+  // Best-effort: a TTS failure never blocks the conversation. While audio plays the bot is in its
+  // "speaking" state; the mouth follows the real audio level, with a synthetic wobble fallback
+  // when no meter is available (dev voice, or WebAudio blocked).
   const speak = useCallback(
     async (text: string) => {
       if (!voiceOn) return;
@@ -145,7 +177,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
   );
 
   // Core turn: feed one answer (typed or transcribed) to the runner and surface/speak the reply.
-  // The avatar acknowledges the answer with a micro-reaction while the runner thinks.
+  // The director picks how the bot acknowledges it (notes down problems, nods at people words…).
   const submit = useCallback(
     async (text: string) => {
       const runner = runnerRef.current;
@@ -154,9 +186,11 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
       setInput("");
       setMessages((m) => [...m, { who: "person", text: t }]);
       setStatus("thinking");
-      setReaction(pickReaction(t));
+      const r = reactToAnswer(t);
+      setReaction(r.bubble);
       clearTimeout(reactionTimer.current);
       reactionTimer.current = setTimeout(() => setReaction(null), REACTION_MS);
+      if (r.gesture) playGesture(r.gesture, r.gesture === "note" ? 3000 : 2200);
       try {
         const { utterance } = await runner.respond(t);
         setMessages((m) => [...m, { who: "agent", text: utterance }]);
@@ -170,10 +204,25 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         setStatus("active");
       }
     },
-    [status, speak],
+    [status, speak, playGesture],
   );
 
   const send = useCallback(() => void submit(input), [submit, input]);
+
+  // While typing: if a domain keyword shows up mid-sentence, the bot visibly perks up (throttled
+  // so it stays charming instead of twitchy).
+  const onType = useCallback(
+    (value: string) => {
+      setInput(value);
+      if (value.length < 8 || Date.now() - lastGlanceAt.current < GLANCE_COOLDOWN_MS) return;
+      const g = glanceAt(value);
+      if (g) {
+        lastGlanceAt.current = Date.now();
+        playGesture(g === "note" ? "lean" : g, 1800); // saving the notepad for the actual submit
+      }
+    },
+    [playGesture],
+  );
 
   // Tap to start recording; tap again to stop → transcribe → submit. The typed box stays usable.
   const toggleMic = useCallback(async () => {
@@ -237,11 +286,9 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
 
   const entryCount = runnerRef.current?.log.count() ?? 0;
   const busy = status !== "active" || micState === "transcribing";
-  const micLabel =
-    micState === "listening" ? "● Listening — tap to stop" : micState === "transcribing" ? "Transcribing…" : "🎤 Speak";
 
-  // What the avatar is doing right now (reactions override via the `reaction` prop).
-  const avatarState: AvatarState = speaking
+  // What the bot is doing right now (one-shot gestures layer on top via the `gesture` prop).
+  const botState: BotState = speaking
     ? "speaking"
     : micState === "listening"
       ? "listening"
@@ -249,14 +296,21 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         ? "thinking"
         : "idle";
 
-  // The avatar's current line — the latest agent utterance, shown as its transcript on the stage.
+  // Random idle life — only on the stage, only when nothing real is happening.
+  useIdleAntics(
+    view === "stage" && status === "active" && botState === "idle" && !reaction,
+    (g) => playGesture(g, g === "note" ? 3000 : 2000),
+  );
+
+  // The bot's current line — the latest agent utterance, shown as its transcript on the stage.
   const lastAgentIdx = messages.map((m) => m.who).lastIndexOf("agent");
   const currentLine = lastAgentIdx >= 0 ? messages[lastAgentIdx].text : "";
   const lastMsg = messages[messages.length - 1];
+  const chips = chipsFor(currentLine);
 
   const stage = (
     <div className="wc-stage">
-      <Avatar ref={avatarRef} state={avatarState} reaction={reaction} />
+      <WarpBot ref={botRef} state={botState} gesture={gesture} reaction={reaction} />
       <p className="wc-stage-hint">
         {micState === "listening"
           ? "Listening to you…"
@@ -264,16 +318,37 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
             ? "Catching every word…"
             : status === "thinking"
               ? "Thinking about what you said…"
-              : speaking
-                ? "Speaking…"
-                : " "}
+              : " "}
       </p>
       {currentLine && (
         <div className="wc-transcript" key={lastAgentIdx}>
           {currentLine}
+          <span className={`wc-wavehint${speaking ? " wc-wavehint-live" : ""}`} aria-hidden>
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
         </div>
       )}
       {lastMsg?.who === "error" && <div className="wc-msg wc-msg-error">{lastMsg.text}</div>}
+      {status === "active" && micState === "idle" && (
+        <div className="wc-chips wc-topic-chips">
+          {chips.map((c) => (
+            <button
+              key={c}
+              className="wc-chip wc-chip-tap"
+              onClick={() => {
+                setInput((v) => v || CHIP_STARTERS[c] || `${c}: `);
+                inputRef.current?.focus();
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -295,27 +370,32 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         <span className="wc-logo">
           WARP<span className="wc-logo-thin">COMPASS</span>
         </span>
-        {status !== "closed" && (
-          <button
-            className="wc-voice-toggle"
-            onClick={() => setView((v) => (v === "stage" ? "chat" : "stage"))}
-            title={view === "stage" ? "Show the conversation transcript" : "Back to the avatar"}
-          >
-            {view === "stage" ? "💬 Transcript" : "🙂 Avatar"}
+        <div className="wc-header-actions">
+          {status !== "closed" && (
+            <button
+              className="wc-iconbtn"
+              onClick={() => setView((v) => (v === "stage" ? "chat" : "stage"))}
+              title={view === "stage" ? "Show the conversation transcript" : "Back to the bot"}
+            >
+              <span className="wc-iconbtn-ico">{view === "stage" ? "💬" : "🤖"}</span>
+              {view === "stage" ? "Transcript" : "Bot"}
+            </button>
+          )}
+          {micSupported && status !== "closed" && (
+            <button
+              className="wc-iconbtn"
+              onClick={() => setVoiceOn((v) => !v)}
+              title={voiceOn ? "Mute spoken replies" : "Speak replies"}
+            >
+              <span className="wc-iconbtn-ico">{voiceOn ? "🔊" : "🔇"}</span>
+              {voiceOn ? "Voice on" : "Voice off"}
+            </button>
+          )}
+          <button className="wc-iconbtn" onClick={onExit}>
+            <span className="wc-iconbtn-ico">↪</span>
+            Exit
           </button>
-        )}
-        {micSupported && status !== "closed" && (
-          <button
-            className="wc-voice-toggle wc-voice-toggle-next"
-            onClick={() => setVoiceOn((v) => !v)}
-            title={voiceOn ? "Mute spoken replies" : "Speak replies"}
-          >
-            {voiceOn ? "🔊 Voice on" : "🔇 Voice off"}
-          </button>
-        )}
-        <button className="wc-link" onClick={onExit}>
-          ← exit
-        </button>
+        </div>
       </header>
 
       {view === "chat" || status === "closed" ? chat : stage}
@@ -350,36 +430,46 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
         </div>
       ) : (
         <div className="wc-composer">
-          <textarea
-            className="wc-input"
-            placeholder={
-              status === "paused"
-                ? "Paused — tap Resume to continue"
-                : micState === "listening"
-                  ? "Listening… tap the mic to stop"
-                  : "Speak, or type your answer…"
-            }
-            value={input}
-            disabled={status !== "active" || micState !== "idle"}
-            rows={2}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
+          <div className="wc-inputwrap">
+            <textarea
+              ref={inputRef}
+              className="wc-input"
+              placeholder={
+                status === "paused"
+                  ? "Paused — tap Resume to continue"
+                  : micState === "listening"
+                    ? "Listening… tap the mic to stop"
+                    : "Speak or type your answer…"
               }
-            }}
-          />
-          <div className="wc-toolbar">
+              value={input}
+              disabled={status !== "active" || micState !== "idle"}
+              rows={2}
+              onChange={(e) => onType(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
             {micSupported && (
               <button
-                className={`wc-mic${micState === "listening" ? " wc-mic-live" : ""}`}
+                className={`wc-micfab${micState === "listening" ? " wc-micfab-live" : ""}`}
                 onClick={() => void toggleMic()}
                 disabled={status !== "active" || micState === "transcribing"}
+                title={
+                  micState === "listening"
+                    ? "Tap to stop and send"
+                    : micState === "transcribing"
+                      ? "Transcribing…"
+                      : "Tap to speak"
+                }
               >
-                {micLabel}
+                {micState === "listening" ? "■" : micState === "transcribing" ? "…" : "🎤"}
               </button>
             )}
+          </div>
+          <div className="wc-toolbar">
             <button className="wc-pill" onClick={send} disabled={busy || !input.trim()}>
               Send
             </button>
@@ -397,7 +487,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
                 }}
                 disabled={busy}
               >
-                Pause
+                ⏸ Pause
               </button>
             )}
             <button className="wc-ghost" onClick={endSession} disabled={busy}>

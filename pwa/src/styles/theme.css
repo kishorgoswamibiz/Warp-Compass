@@ -534,10 +534,11 @@ body {
   }
 }
 
-/* ── Avatar stage (Phase 12) ──────────────────────────────────────────────────
-   Pure CSS expressions keyed off the svg's data-state; the only JS-driven part
-   is --wc-mouth (0–1 audio level set by the session screen during TTS).
-   Everything animates transform/opacity only — compositor-cheap, PWA-light.   */
+
+/* ── Bot stage (Phase 12v2, per PWA Bot Sample reference) ─────────────────────
+   The WarpBot's own animation lives in src/avatar/bot.css; this block is the
+   stage around it: soft mint spotlight, transcript card + waveform, topic
+   chips, stacked icon header buttons, and the mic-in-input composer.        */
 
 .wc-stage {
   flex: 1;
@@ -545,214 +546,46 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px 0 20px;
+  gap: 8px;
+  padding: 4px 0 16px;
   text-align: center;
+  /* soft spotlight behind the bot, like the reference's mint glow */
+  background: radial-gradient(circle at 50% 32%, rgba(21, 201, 91, 0.09), transparent 55%);
 }
 
-.wc-avatar-wrap {
-  position: relative;
+/* header: stacked icon-over-label buttons (💬 Transcript · 🔊 Voice on · ↪ Exit) */
+.wc-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.wc-iconbtn {
+  appearance: none;
+  background: none;
+  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 2px;
+  color: var(--wc-ink-soft);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 10px;
 }
-.wc-avatar {
-  width: clamp(150px, 42vw, 210px);
-  height: auto;
-  overflow: visible;
-}
-
-/* every animated SVG part scales/rotates about its own box */
-.wc-av-head,
-.wc-av-eye,
-.wc-av-eyeball,
-.wc-av-pupil,
-.wc-av-brow,
-.wc-av-mouth,
-.wc-av-mouth-inner,
-.wc-av-cheek {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-/* ── idle: gentle bob, blinks, wandering pupils ── */
-.wc-av-head {
-  animation: wc-av-bob 4.2s ease-in-out infinite;
-}
-@keyframes wc-av-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
-}
-.wc-av-eye {
-  animation: wc-av-blink 4.6s ease-in-out infinite;
-}
-.wc-av-eye-r {
-  animation-delay: 0.08s; /* a hair apart so blinks feel organic, not mechanical */
-}
-@keyframes wc-av-blink {
-  0%,
-  91%,
-  100% {
-    transform: scaleY(1);
-  }
-  93.5%,
-  95.5% {
-    transform: scaleY(0.06);
-  }
-}
-.wc-avatar[data-state="idle"] .wc-av-pupil {
-  animation: wc-av-wander 7s ease-in-out infinite;
-}
-@keyframes wc-av-wander {
-  0%,
-  22%,
-  100% {
-    transform: translate(0, 0);
-  }
-  28%,
-  42% {
-    transform: translate(2.4px, 0.6px);
-  }
-  50%,
-  64% {
-    transform: translate(-2.2px, 0.4px);
-  }
-  72%,
-  88% {
-    transform: translate(0.6px, -1.2px);
-  }
-}
-.wc-av-brow,
-.wc-av-eyeball,
-.wc-av-pupil,
-.wc-av-mouth-inner {
-  transition: transform 0.22s ease;
-}
-
-/* ── listening: brows up, eyes wider, curious tilt + slow nods ── */
-.wc-avatar[data-state="listening"] .wc-av-head {
-  animation: wc-av-curious 3.4s ease-in-out infinite;
-}
-@keyframes wc-av-curious {
-  0%,
-  100% {
-    transform: rotate(0deg) translateY(0);
-  }
-  22% {
-    transform: rotate(3.5deg) translateY(-1px);
-  }
-  48% {
-    transform: rotate(3.5deg) translateY(2px); /* the little nod */
-  }
-  62% {
-    transform: rotate(3.5deg) translateY(-1px);
-  }
-  85% {
-    transform: rotate(0.5deg) translateY(0);
-  }
-}
-.wc-avatar[data-state="listening"] .wc-av-brow {
-  transform: translateY(-3px);
-}
-.wc-avatar[data-state="listening"] .wc-av-eyeball {
-  transform: scale(1.12);
-}
-.wc-avatar[data-state="listening"] .wc-av-mouth-inner {
-  transform: scaleY(0.16) scaleX(0.8);
-}
-
-/* ── thinking: eyes drift up, one brow cocked ── */
-.wc-avatar[data-state="thinking"] .wc-av-head {
-  animation: wc-av-bob 3s ease-in-out infinite;
-  transform: rotate(-2deg);
-}
-.wc-avatar[data-state="thinking"] .wc-av-pupil {
-  transform: translate(1.8px, -3.2px);
-}
-.wc-avatar[data-state="thinking"] .wc-av-brow-l {
-  transform: translateY(-3.5px) rotate(-7deg);
-}
-.wc-avatar[data-state="thinking"] .wc-av-brow-r {
-  transform: translateY(1px) rotate(6deg);
-}
-.wc-avatar[data-state="thinking"] .wc-av-mouth-inner {
-  transform: scaleY(0.14) scaleX(0.55) translateX(3px);
-}
-
-/* ── speaking: the mouth follows the live audio level ── */
-.wc-av-mouth-inner {
-  transform: scaleY(0.14); /* resting: a soft closed line */
-}
-.wc-avatar[data-state="speaking"] .wc-av-mouth-inner {
-  transition: transform 0.06s linear;
-  transform: scaleY(var(--wc-mouth, 0.3));
-}
-.wc-avatar[data-state="speaking"] .wc-av-brow {
-  animation: wc-av-brow-talk 1.8s ease-in-out infinite;
-}
-@keyframes wc-av-brow-talk {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  30% {
-    transform: translateY(-1.6px);
-  }
-  65% {
-    transform: translateY(-0.4px);
-  }
-}
-
-/* ── reacting: quick pop-eyed "oh!" beat right after the person answers ── */
-.wc-avatar[data-state="reacting"] .wc-av-eyeball {
-  transform: scale(1.28);
-}
-.wc-avatar[data-state="reacting"] .wc-av-brow {
-  transform: translateY(-4.5px);
-}
-.wc-avatar[data-state="reacting"] .wc-av-mouth-inner {
-  transform: scaleY(0.85) scaleX(0.65); /* a round little "oh" */
-}
-.wc-avatar[data-state="reacting"] .wc-av-head {
-  animation: wc-av-pop 0.5s ease-out;
-}
-@keyframes wc-av-pop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.045);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-/* reaction bubble — reserved space so the face never jumps when it appears */
-.wc-avatar-bubble {
-  min-height: 34px;
-  padding: 6px 14px;
-  border-radius: var(--wc-radius-pill);
-  background: var(--wc-card);
-  border: 1px solid var(--wc-line);
-  font-size: 15px;
-  font-weight: 700;
+.wc-iconbtn:hover {
   color: var(--wc-ink);
-  opacity: 0;
-  transform: translateY(6px) scale(0.9);
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  background: var(--wc-bg-2);
 }
-.wc-avatar-bubble-on {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+.wc-iconbtn-ico {
+  font-size: 17px;
+  line-height: 1;
 }
 
-/* what the avatar is doing, in words — reserved line so the layout stays still */
+/* what the bot is doing, in words — reserved line so the layout stays still */
 .wc-stage-hint {
   min-height: 20px;
   margin: 0;
@@ -760,24 +593,24 @@ body {
   color: var(--wc-ink-soft);
 }
 
-/* the avatar's transcript: the LLM's current question, captioned under the face */
+/* the bot's transcript: the current question, captioned under the face */
 .wc-transcript {
   max-width: 46ch;
   background: var(--wc-card);
   border: 1px solid var(--wc-line);
-  border-radius: var(--wc-radius);
-  padding: 16px 20px;
-  font-size: 17px;
+  border-radius: 22px;
+  padding: 18px 22px 12px;
+  font-size: 17.5px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: 0 10px 28px rgba(12, 15, 13, 0.05);
+  box-shadow: 0 12px 32px rgba(12, 15, 13, 0.06);
   animation: wc-transcript-in 0.35s ease;
 }
 @keyframes wc-transcript-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -785,7 +618,92 @@ body {
   }
 }
 
-/* two header toggles now (transcript + voice): only the first takes the auto margin */
-.wc-voice-toggle-next {
-  margin-left: 8px;
+/* the little waveform under the question (dances while the bot speaks) */
+.wc-wavehint {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+  margin-top: 6px;
+}
+.wc-wavehint i {
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--wc-green);
+  opacity: 0.5;
+}
+.wc-wavehint i:nth-child(3) {
+  height: 10px;
+}
+.wc-wavehint-live i {
+  animation: wc-wavebar 0.7s ease-in-out infinite;
+  opacity: 0.9;
+}
+.wc-wavehint-live i:nth-child(1) { animation-delay: 0.05s; }
+.wc-wavehint-live i:nth-child(2) { animation-delay: 0.2s; }
+.wc-wavehint-live i:nth-child(4) { animation-delay: 0.25s; }
+.wc-wavehint-live i:nth-child(5) { animation-delay: 0.1s; }
+@keyframes wc-wavebar {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 14px;
+  }
+}
+
+/* topic chips — quick starters under the question, like the reference */
+.wc-topic-chips {
+  margin-top: 10px;
+}
+.wc-chip-tap {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.wc-chip-tap:hover {
+  border-color: var(--wc-green);
+  transform: translateY(-1px);
+}
+
+/* composer: mic button floats inside the rounded input, WhatsApp-style */
+.wc-inputwrap {
+  position: relative;
+}
+.wc-inputwrap .wc-input {
+  border-radius: 24px;
+  padding: 14px 62px 14px 18px;
+}
+.wc-micfab {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: var(--wc-green);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(21, 201, 91, 0.35);
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.wc-micfab:hover:not(:disabled) {
+  background: var(--wc-green-deep);
+}
+.wc-micfab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.wc-micfab-live {
+  animation: wc-pulse 1.1s ease-in-out infinite;
 }

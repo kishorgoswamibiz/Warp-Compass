@@ -1,11 +1,16 @@
-// Phase 8/11 shell: a landing screen → the live runner (SessionScreen). Holds NO graph; all live
-// calls route through the key-proxy (keys never in the browser). The phone has a STABLE participant
-// id (the bus is keyed by it) and, on start, AUTO-PULLS its latest Session Brief from the brain over
-// the network (Phase 11) to cross-pollinate the session — no manual import in normal use. The manual
+// Phase 8/11/13 shell: onboarding gate → a landing screen → the live runner (SessionScreen).
+// Holds NO graph; all live calls route through the key-proxy (keys never in the browser).
+//
+// P13: the device's identity is DECLARED once (name + role) before anything else — that identity is
+// the participant id, the Drive folder name, and the graph's provenance key, so nothing may run
+// before it exists. Thereafter the phone AUTO-PULLS its latest Session Brief from the brain over the
+// network (Phase 11) to cross-pollinate the session — no manual import in normal use. The manual
 // brief-file import appears ONLY if that automatic pull fails (offline / endpoint unreachable).
 import { useRef, useState } from "react";
 import { SessionScreen } from "./screens/SessionScreen";
-import { getParticipant, parseBriefFile, pullLatestBrief } from "./sync";
+import { OnboardingCard } from "./screens/OnboardingCard";
+import { clearParticipant, getParticipant, parseBriefFile, pullLatestBrief } from "./sync";
+import type { Participant } from "./sync";
 import type { SessionBrief } from "./runner";
 
 export function App() {
@@ -14,9 +19,25 @@ export function App() {
   const [pulling, setPulling] = useState(false);
   const [pullFailed, setPullFailed] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const participant = getParticipant();
-  const shortId = participant.participant_id.replace(/^p_/, "").slice(0, 8);
+  // `null` until this device is onboarded. Held in state so completing the card re-renders straight
+  // into the landing screen without a reload.
+  const [participant, setParticipant] = useState<Participant | null>(() => getParticipant());
+
+  // ── the onboarding gate ────────────────────────────────────────────────────
+  if (!participant) return <OnboardingCard onDone={setParticipant} />;
+
+  // Device-local only: clears the identity so the next launch onboards afresh. Answers already
+  // pushed stay in the engagement's records — removing a person from the brain is the operator's
+  // `retire-participant` step (P13 §6.5).
+  const switchUser = () => {
+    clearParticipant();
+    setParticipant(null);
+    setBrief(undefined);
+    setStarted(false);
+    setConfirmSwitch(false);
+  };
 
   // Start a session, auto-pulling the latest brief first (warm start). On success we go straight in;
   // only if the pull fails do we stay and reveal the offline fallback (start cold / import a file).
@@ -44,7 +65,7 @@ export function App() {
   if (started) {
     return (
       <div className="wc-app">
-        <SessionScreen brief={brief} onExit={() => setStarted(false)} />
+        <SessionScreen participant={participant} brief={brief} onExit={() => setStarted(false)} />
       </div>
     );
   }
@@ -112,9 +133,33 @@ export function App() {
           Voice or text. Your answers sync to the brain automatically, and your updated brief loads
           here on its own next time — nothing to export or import by hand.
         </p>
-        <p className="wc-note">
-          You are <code>{shortId}</code> on this device.
+        <p className="wc-note wc-whoami">
+          <span>
+            <span className="wc-whoami-name">{participant.display_name}</span>
+            <span className="wc-whoami-role"> · {participant.role_title}</span>
+          </span>
+          <button className="wc-switch" onClick={() => setConfirmSwitch((v) => !v)}>
+            Not you? Switch user
+          </button>
         </p>
+
+        {confirmSwitch && (
+          <div className="wc-switch-confirm">
+            <p className="wc-note">
+              Switching user only resets <strong>this device</strong> — the next person will be
+              asked for their name and role. Answers already sent stay with the team's records; ask
+              your facilitator if the previous user should be removed.
+            </p>
+            <div className="wc-toolbar">
+              <button className="wc-ghost" onClick={switchUser}>
+                Switch user
+              </button>
+              <button className="wc-ghost" onClick={() => setConfirmSwitch(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="wc-stats">
           <div>

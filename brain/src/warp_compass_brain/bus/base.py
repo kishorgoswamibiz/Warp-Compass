@@ -9,6 +9,15 @@ can be added at any time with no config (docs/02 §3.2, §3.4, §14).
         profile.json        # registry entry: id, persona mapping, which logs are already ingested
         answer_logs/*.json   # runner -> brain (immutable; the source of truth)
         briefs/*.json        # brain -> runner (the next Session Brief)
+    {root}/_retired.json     # P13: who has been retired from the engagement (see below)
+    {root}/_archive/         # P13: retired participants' folders, moved aside
+
+**Retirement (P13).** A participant leaves by having their folder moved out of `participants/`.
+That alone isn't enough, because the Planner enumerates personas from *graph provenance*, not from
+the bus — so the brain would keep planning for them and `write_brief` would recreate the folder.
+`_retired.json` is the explicit marker that closes that loop, and it lets the round tell two very
+different situations apart: a deliberately retired person (skip silently) versus a folder that
+simply hasn't synced down from Drive yet (warn loudly). Retiring NEVER touches the graph (ADR #30).
 
 `FolderBus` is the shared-folder implementation; a networked sync endpoint can be swapped in behind
 this same interface later (AGENTS.md "Everything swappable").
@@ -49,3 +58,17 @@ class Bus(ABC):
     @abstractmethod
     def write_brief(self, participant_id: str, name: str, brief: dict) -> None:
         """Write a Session Brief into the participant's `briefs/` folder."""
+
+    # --- retirement registry (P13) ---------------------------------------------------------
+
+    @abstractmethod
+    def retired_records(self) -> list[dict]:
+        """Every retirement record, newest last. Empty when nobody has been retired."""
+
+    def list_retired(self) -> set[str]:
+        """Ids of everyone retired from this engagement. Cheap wrapper over the records."""
+        return {str(r["id"]) for r in self.retired_records() if r.get("id")}
+
+    @abstractmethod
+    def mark_retired(self, record: dict) -> None:
+        """Append one retirement record (id + display name + role + when + where archived)."""

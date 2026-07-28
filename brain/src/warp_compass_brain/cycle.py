@@ -15,10 +15,16 @@ Design notes:
   skipping avoids paying for the LLM twice.
 - **Dependency-injected:** the runner takes an ingestor + planner (the brain's real ones in the CLI,
   scripted fakes in tests), so the cycle logic is verifiable without Neo4j or the network.
+- **Retirement-aware (P13):** the Planner enumerates personas from *graph provenance*, so it keeps
+  planning for people who have left — and since retiring never touches the graph (ADR #30), it
+  always will. A brief is therefore written ONLY to a participant that currently exists on the bus.
+  Without that rule `write_brief`'s `mkdir(parents=True)` would recreate the very folder the
+  operator just archived, silently undoing every retirement.
 """
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -62,6 +68,11 @@ class RoundSummary:
     quarantined: int = 0
     edges: int = 0
     briefs_written: list[str] = field(default_factory=list)
+    #: Personas still in the graph whose participant has been retired — expected, not a problem.
+    retired_skipped: list[str] = field(default_factory=list)
+    #: Personas in the graph with NO participant folder and NO retirement record. Almost always
+    #: means Drive hasn't synced down; surfaced loudly so it can't be mistaken for a retirement.
+    missing_participants: list[str] = field(default_factory=list)
     per_participant: list[ParticipantResult] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -99,9 +110,25 @@ class RoundRunner:
         briefs = self._planner.plan_all(session_id=session_id)
 
         # ── 3. distribute each persona's brief to its participant folder ─────────
+        # A persona with no live folder gets NO brief. There is deliberately no fallback to
+        # `persona_id` here: that fallback (pre-P13) recreated archived folders (P13 Finding 1).
+        retired = self._retired_ids()
         result_by_pid = {r.participant_id: r for r in summary.per_participant}
         for brief in briefs:
-            participant_id = persona_to_participant.get(brief.persona_id, brief.persona_id)
+            participant_id = persona_to_participant.get(brief.persona_id)
+            if participant_id is None:
+                if brief.persona_id in retired:
+                    summary.retired_skipped.append(brief.persona_id)
+                else:
+                    summary.missing_participants.append(brief.persona_id)
+                    print(
+                        f"[round] WARNING: persona {brief.persona_id!r} has knowledge in the graph "
+                        "but no participant folder on the bus and no retirement record — no brief "
+                        "written. If they are still in the engagement, their folder hasn't synced "
+                        "down yet; if they have left, run `retire-participant`.",
+                        file=sys.stderr,
+                    )
+                continue
             name = f"{session_id}.json"
             self._bus.write_brief(participant_id, name, brief.to_dict())
             label = f"{participant_id}/{name}"
@@ -110,6 +137,11 @@ class RoundRunner:
                 result_by_pid[participant_id].brief_written = name
 
         return summary
+
+    def _retired_ids(self) -> set[str]:
+        """Retired ids, tolerating a bus that predates P13 (or a test double without the method)."""
+        lister = getattr(self._bus, "list_retired", None)
+        return set(lister()) if callable(lister) else set()
 
     # ── internals ───────────────────────────────────────────────────────────────
     def _process_participant(self, participant_id: str, summary: RoundSummary) -> ParticipantResult:

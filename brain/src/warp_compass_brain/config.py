@@ -46,6 +46,9 @@ class Settings(BaseSettings):
 
     # --- Planner / Session Brief (Phase 4) ---
     planner_max_threads: int = 6  # top-N threads carried in a brief; the rest go to reserve_threads
+    # P13: questions inherited from retired teammates, appended BELOW a person's own threads. Keep
+    # it small — they're someone else's process, and too many turns a brief into a quiz.
+    planner_orphan_max: int = 2
 
     # --- Review queues (Phase 2) ---
     quarantine_path: str = "./_state/quarantine.jsonl"

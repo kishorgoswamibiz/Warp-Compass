@@ -13,6 +13,8 @@ export const ANSWER_LOG_SCHEMA_VERSION = "1.0.0";
 
 export class AnswerLogBuilder {
   private readonly entries: AnswerLogEntry[] = [];
+  /** Entries the app contributed on the person's behalf (the P13 identity seed), not spoken turns. */
+  private seeded = 0;
 
   constructor(
     private readonly session_id: string,
@@ -42,8 +44,24 @@ export class AnswerLogBuilder {
     });
   }
 
+  /**
+   * Append the onboarding identity as the log's first entry (P13 §4.1). Contract-identical to a
+   * normal entry — the brain must not need to special-case it — but counted separately so the UI
+   * reports the number of answers the person actually gave.
+   */
+  appendSeed(e: Parameters<AnswerLogBuilder["append"]>[0]): void {
+    this.append(e);
+    this.seeded += 1;
+  }
+
+  /** Every entry in the log, including a seeded identity entry. */
   count(): number {
     return this.entries.length;
+  }
+
+  /** Entries the person actually spoke or typed this session — what the UI should report. */
+  answerCount(): number {
+    return this.entries.length - this.seeded;
   }
 
   /** The finished, contract-shaped Answer Log. */

@@ -24,7 +24,8 @@ import { Runner, WorkerLLMProvider } from "../runner";
 import type { RunnerClock, SessionBrief } from "../runner";
 import { WarpBot, chipsFor, glanceAt, reactToAnswer, useIdleAntics } from "../avatar";
 import type { BotGesture, BotState } from "../avatar";
-import { downloadAnswerLog, getParticipant, pushAnswerLog } from "../sync";
+import { downloadAnswerLog, markIdentitySeeded, needsIdentitySeed, pushAnswerLog } from "../sync";
+import type { Participant } from "../sync";
 import {
   BrowserTTSProvider,
   MicRecorder,
@@ -79,8 +80,19 @@ function newColdBrief(personaId: string): SessionBrief {
   };
 }
 
-/** `brief` is an imported Session Brief from the bus (P8); omit it for a fresh cold-start session. */
-export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: SessionBrief }) {
+/**
+ * `brief` is the Session Brief pulled from the bus (P11); omit it for a fresh cold-start session.
+ * `participant` is the device's declared identity (P13) — guaranteed by App's onboarding gate.
+ */
+export function SessionScreen({
+  onExit,
+  brief,
+  participant,
+}: {
+  onExit: () => void;
+  brief?: SessionBrief;
+  participant: Participant;
+}) {
   const runnerRef = useRef<Runner | null>(null);
   const micRef = useRef<MicRecorder | null>(null);
   const sttRef = useRef(new WorkerSTTProvider());
@@ -116,12 +128,14 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
 
   // Build the runner once and emit the opening utterance.
   useEffect(() => {
-    // Stable participant id across sessions; the bus folder is keyed by it (P8). An imported brief
-    // (from the bus) cross-pollinates this session; otherwise we cold-start.
-    const participant = getParticipant();
+    // Stable participant id across sessions; the bus folder is keyed by it (P8/P13). A pulled brief
+    // cross-pollinates this session; otherwise we cold-start — but never coldly: the declared
+    // identity means the bot greets by name and skips "tell me about your role" (P13 §4).
     const sessionBrief = brief ?? newColdBrief(participant.persona_id);
     const runner = new Runner(sessionBrief, new WorkerLLMProvider(), clock, {
       participantId: participant.participant_id,
+      identity: { display_name: participant.display_name, role_title: participant.role_title },
+      seedIdentity: needsIdentitySeed(),
     });
     runnerRef.current = runner;
     micRef.current = new MicRecorder();
@@ -133,7 +147,7 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
       clearTimeout(reactionTimer.current);
       clearTimeout(gestureTimer.current);
     };
-  }, [brief]);
+  }, [brief, participant]);
 
   useEffect(() => {
     if (view === "chat" || status === "closed")
@@ -293,19 +307,29 @@ export function SessionScreen({ onExit, brief }: { onExit: () => void; brief?: S
     // Auto-push the Answer Log to the brain over the network (Phase 11). The manual download stays
     // as the offline fallback if the push can't reach the sync endpoint.
     setSyncState("pushing");
-    void pushAnswerLog(runner.log.build(), getParticipant())
-      .then((r) => setSyncState(r.written === false ? "exists" : "pushed"))
+    void pushAnswerLog(runner.log.build(), participant)
+      .then((r) => {
+        setSyncState(r.written === false ? "exists" : "pushed");
+        // The log that just landed carries the identity entry, so no later session repeats it.
+        markIdentitySeeded();
+      })
       .catch(() => setSyncState("failed"));
-  }, [speak]);
+  }, [speak, participant]);
 
   const download = useCallback(() => {
     const runner = runnerRef.current;
     if (!runner) return;
     // Bus filename convention (P8): drop this into your participants/{id}/answer_logs/ folder.
+    // NOTE: downloading deliberately does NOT mark the identity as seeded. A downloaded file only
+    // reaches the brain if the operator remembers to drop it in; if we stamped it here and they
+    // didn't, no later session would ever re-seed and the Role node would be lost silently. The
+    // cost of being wrong the other way is one duplicate introduction that merges into the same
+    // node — so we only trust a push that actually succeeded.
     downloadAnswerLog(runner.log.build());
   }, []);
 
-  const entryCount = runnerRef.current?.log.count() ?? 0;
+  // What the PERSON contributed — a seeded identity entry isn't an answer they gave (P13 §4.1).
+  const entryCount = runnerRef.current?.log.answerCount() ?? 0;
   const busy = status !== "active" || micState === "transcribing";
 
   // What the bot is doing right now (one-shot gestures layer on top via the `gesture` prop).

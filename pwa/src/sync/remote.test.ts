@@ -8,7 +8,13 @@ import { pullLatestBrief, pushAnswerLog } from "./remote";
 import type { AnswerLog } from "../runner";
 import type { Participant } from "./participant";
 
-const participant: Participant = { participant_id: "p_abc", persona_id: "p_abc", display_name: "Asha" };
+const participant: Participant = {
+  participant_id: "p_abc",
+  persona_id: "p_abc",
+  display_name: "Asha",
+  role_title: "Sales Rep",
+  onboarded_at: "2026-07-28T09:00:00.000Z",
+};
 const log = { session_id: "s_1", persona_id: "p_abc", entries: [] } as unknown as AnswerLog;
 
 function stubFetch(status: number, body: unknown) {
@@ -32,6 +38,9 @@ describe("pushAnswerLog", () => {
     const sent = JSON.parse((init as RequestInit).body as string);
     expect(sent.participant_id).toBe("p_abc");
     expect(sent.answer_log.session_id).toBe("s_1");
+    // P13: the declared identity rides along so Drive can name the folder and its README.
+    expect(sent.display_name).toBe("Asha");
+    expect(sent.role_title).toBe("Sales Rep");
   });
 
   it("treats an already-existing log (write-once) as success with written:false", async () => {

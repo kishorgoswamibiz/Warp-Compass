@@ -31,6 +31,16 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
+def _same_path(a: str, b: str) -> bool:
+    """Do two path strings point at the same place? Unresolvable paths compare as strings."""
+    from pathlib import Path
+
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return a == b
+
+
 def _now() -> str:
     # Workflow scripts forbid Date.now(); here in normal Python we just use the clock.
     from datetime import datetime
@@ -173,6 +183,7 @@ def cmd_run_round(args) -> int:
     """
     from .bus import FolderBus
     from .cycle import RoundRunner
+    from .lifecycle import effective_retired
     from .ontology import load_ontology
     from .planner import Planner
 
@@ -180,12 +191,28 @@ def cmd_run_round(args) -> int:
     bus = FolderBus(args.bus or s.bus_root)
     graph, ingestor = _build_ingestor(s)
     try:
-        planner = Planner(graph, load_ontology(), max_threads=s.planner_max_threads, now=_now())
+        planner = Planner(
+            graph,
+            load_ontology(),
+            max_threads=s.planner_max_threads,
+            orphan_max=s.planner_orphan_max,
+            # P13: skip briefs for people who have left, and hand their unanswered questions to
+            # whoever is still here. `effective_retired` ignores a stale marker on someone whose
+            # folder has been restored.
+            retired_personas=effective_retired(bus),
+            now=_now(),
+        )
         runner = RoundRunner(bus, ingestor, planner, now=_now())
         summary = runner.run(session_id=args.session)
     finally:
         graph.close()
     print(json.dumps(summary.to_dict(), indent=2, ensure_ascii=False))
+    if summary.missing_participants:
+        print(
+            f"\n⚠ {len(summary.missing_participants)} persona(s) had no participant folder and no "
+            "retirement record — see the warning above.",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -238,16 +265,21 @@ def cmd_docgen(args) -> int:
     --include-unverified to add unverified facts (marked). Broken links are shown, never bridged.
     Write to a file with --out, else prints to stdout.
     """
+    from .bus import FolderBus
     from .docgen import DocGenerator, render_markdown
+    from .lifecycle import persona_display_names
     from .ontology import load_ontology
 
     s = get_settings()
+    # P13: source lines read "Rahul Mehta (Business Analyst)" instead of a slug. Resolved from the
+    # bus profiles, so an unknown or pre-P13 persona still renders as its raw id.
+    names = persona_display_names(FolderBus(args.bus or s.bus_root))
     graph = _open_graph(s)
     try:
         docs = DocGenerator(
             graph, load_ontology(), include_unverified=args.include_unverified
         ).generate()
-        markdown = render_markdown(docs)
+        markdown = render_markdown(docs, names)
     finally:
         graph.close()
 
@@ -305,7 +337,137 @@ def cmd_corroborate(args) -> int:
     return 0
 
 
+def cmd_retire_participant(args) -> int:
+    """Remove one person from the engagement — bus only, never the graph (P13, ADR #30).
+
+    Archives their folder to `_archive/<id>__<date>/` and records the retirement so the next round
+    stops writing them briefs (and stops recreating the folder). Their contributed knowledge stays
+    in the graph; their unanswered questions are re-offered to live personas as orphan threads.
+    """
+    from .bus import FolderBus
+    from .lifecycle import LifecycleError, retire_participant
+
+    s = get_settings()
+    bus = FolderBus(args.bus or s.bus_root)
+    try:
+        result = retire_participant(
+            bus,
+            args.id,
+            now=_now(),
+            hard_delete=args.hard_delete,
+            dry_run=args.dry_run,
+        )
+    except LifecycleError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    who = result.display_name or result.participant_id
+    verb = "WOULD retire" if result.dry_run else "Retired"
+    print(f"{verb} {who} ({result.role_title or 'role not declared'}) — `{result.participant_id}`")
+    print(f"  answer logs: {result.answer_logs}   briefs: {result.briefs}")
+    if result.hard_deleted:
+        print("  folder: DELETED (no archive kept)")
+    elif result.archived_to:
+        print(f"  folder: {'would move' if result.dry_run else 'moved'} to {result.archived_to}")
+    print("  graph: untouched — their knowledge stays; open questions pass to the team.")
+    if result.dry_run:
+        print("\n(dry run — nothing changed. Re-run without --dry-run to apply.)")
+    return 0
+
+
+def cmd_list_participants(args) -> int:
+    """Who is in this engagement — live participants, then retired ones."""
+    from .bus import FolderBus
+    from .lifecycle import roster
+
+    s = get_settings()
+    entries = roster(FolderBus(args.bus or s.bus_root))
+    if not entries:
+        print("No participants yet. A person appears the moment their first session syncs.")
+        return 0
+
+    for e in entries:
+        if e.retired:
+            print(
+                f"  ⏸  {e.display_name or e.id} — {e.role_title or '?'}  `{e.id}`"
+                f"   retired {e.retired_at[:10]}"
+            )
+        else:
+            print(
+                f"  ●  {e.display_name or e.id} — {e.role_title or '?'}  `{e.id}`"
+                f"   logs: {e.answer_logs}  briefs: {e.briefs}"
+                + (f"  last seen {e.last_seen[:10]}" if e.last_seen else "")
+            )
+    live = sum(1 for e in entries if not e.retired)
+    print(f"\n{live} active, {len(entries) - live} retired.")
+    return 0
+
+
+def cmd_reset_engagement(args) -> int:
+    """Wipe the engagement back to empty — for starting a clean round of testing (P13 §7)."""
+    from pathlib import Path
+
+    from .bus import FolderBus
+    from .lifecycle import reset_engagement
+
+    s = get_settings()
+    bus_root = args.bus or s.bus_root
+    bus = FolderBus(bus_root)
+    # Resolve the graph against the bus we were actually pointed at. Deferring to
+    # `resolve_graph_root(settings)` here would wipe the REAL graph while resetting a scratch bus.
+    graph_root = s.graph_root or str(Path(bus_root) / "graph")
+
+    # `_state/` (vectors + review queues) is global to this brain install, not to a bus. Clearing
+    # it while resetting SOMEONE ELSE'S bus would silently destroy the configured engagement's
+    # embeddings — so only clear it when we're resetting the configured bus.
+    is_configured_bus = _same_path(bus_root, s.bus_root)
+    state_paths: list[str] = (
+        [s.vector_db_path, s.quarantine_path, s.pending_taxonomy_path] if is_configured_bus else []
+    )
+
+    if not args.yes and not args.dry_run:
+        print(
+            "refusing to reset without --yes.\n"
+            f"This deletes every participant folder under {bus_root}, the graph at {graph_root}"
+            + (", and the local vector/queue state" if is_configured_bus else "")
+            + ". Preview it first with --dry-run.",
+            file=sys.stderr,
+        )
+        return 1
+
+    result = reset_engagement(
+        bus,
+        graph_root,
+        state_paths,
+        dry_run=args.dry_run,
+        keep_archive=args.keep_archive,
+    )
+
+    verb = "WOULD delete" if result.dry_run else "Deleted"
+    print(f"{verb} (bus: {bus_root}):")
+    print(f"  participants : {len(result.participants_removed)} "
+          f"({', '.join(result.participants_removed) or 'none'})")
+    print(f"  graph        : {graph_root if result.graph_removed else 'nothing there'}")
+    print(f"  retired list : {'yes' if result.retired_removed else 'nothing there'}")
+    print(f"  archive      : {'yes' if result.archive_removed else 'kept / nothing there'}")
+    if is_configured_bus:
+        print(f"  local state  : {', '.join(result.state_files_removed) or 'nothing there'}")
+    else:
+        print("  local state  : SKIPPED — belongs to the configured bus, not this one")
+    if result.dry_run:
+        print("\n(dry run — nothing changed. Re-run with --yes to apply.)")
+    else:
+        print(
+            "\nClean. Verify with `run-round` (zero participants) and an all-zero graph/index.md.\n"
+            "Still to do by hand: clear each test device via the app's 'Switch user', and "
+            "regenerate deliverable.md if it holds old test data."
+        )
+    return 0
+
+
 def cmd_plan(args) -> int:
+    from .bus import FolderBus
+    from .lifecycle import effective_retired
     from .ontology import load_ontology
     from .planner import Planner
 
@@ -313,7 +475,12 @@ def cmd_plan(args) -> int:
     graph = _open_graph(s)
     try:
         planner = Planner(
-            graph, load_ontology(), max_threads=s.planner_max_threads, now=_now()
+            graph,
+            load_ontology(),
+            max_threads=s.planner_max_threads,
+            orphan_max=s.planner_orphan_max,
+            retired_personas=effective_retired(FolderBus(s.bus_root)),
+            now=_now(),
         )
         if args.persona:
             briefs = [planner.plan(args.persona, session_id=args.session)]
@@ -359,6 +526,40 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--session", default="s_next", help="session_id stamped on the emitted briefs")
     pr.set_defaults(func=cmd_run_round)
 
+    pret = sub.add_parser(
+        "retire-participant",
+        help="remove one person from the engagement (bus only — the graph is never touched)",
+    )
+    pret.add_argument("--id", required=True, help="the participant id (see list-participants)")
+    pret.add_argument("--bus", default=None, help="bus root (default: settings.bus_root)")
+    pret.add_argument(
+        "--dry-run", action="store_true", help="show what would happen; change nothing"
+    )
+    pret.add_argument(
+        "--hard-delete",
+        action="store_true",
+        help="delete the folder instead of archiving it to _archive/",
+    )
+    pret.set_defaults(func=cmd_retire_participant)
+
+    plist = sub.add_parser("list-participants", help="who is in this engagement (live + retired)")
+    plist.add_argument("--bus", default=None, help="bus root (default: settings.bus_root)")
+    plist.set_defaults(func=cmd_list_participants)
+
+    prst = sub.add_parser(
+        "reset-engagement",
+        help="DESTRUCTIVE: wipe participants + graph + local state to start a clean engagement",
+    )
+    prst.add_argument("--bus", default=None, help="bus root (default: settings.bus_root)")
+    prst.add_argument("--yes", action="store_true", help="required to actually delete anything")
+    prst.add_argument(
+        "--dry-run", action="store_true", help="show what would be deleted; change nothing"
+    )
+    prst.add_argument(
+        "--keep-archive", action="store_true", help="preserve _archive/ (retired people's folders)"
+    )
+    prst.set_defaults(func=cmd_reset_engagement)
+
     pc = sub.add_parser(
         "completeness", help="score the graph vs the ontology + list open threads (OKF graph)"
     )
@@ -388,6 +589,9 @@ def main(argv: list[str] | None = None) -> int:
         help="also render unverified facts (marked); default is confirmed-only",
     )
     pdoc.add_argument("--out", default=None, help="write Markdown to this file (default: stdout)")
+    pdoc.add_argument(
+        "--bus", default=None, help="bus root, for persona names (default: settings.bus_root)"
+    )
     pdoc.set_defaults(func=cmd_docgen)
 
     pp = sub.add_parser(

@@ -8,10 +8,19 @@
  */
 
 export { Runner, CLOSING_UTTERANCE } from "./runner";
-export type { TurnResult, RunnerClock } from "./runner";
+export type { TurnResult, RunnerClock, RunnerOptions } from "./runner";
 export { Session } from "./session";
 export { AnswerLogBuilder, ANSWER_LOG_SCHEMA_VERSION } from "./answerlog";
-export { COLD_START_OPENERS, SYSTEM_PROMPT, buildUserPrompt, isLiveDecision } from "./prompts";
+export {
+  COLD_START_OPENERS,
+  IDENTITY_OPENER_INDEX,
+  IDENTITY_QUESTION,
+  SYSTEM_PROMPT,
+  buildUserPrompt,
+  firstName,
+  identityAnswer,
+  isLiveDecision,
+} from "./prompts";
 export { WorkerLLMProvider } from "./llm/worker";
 export { DirectDeepSeekProvider } from "./llm/deepseek";
 export { FakeLLMProvider } from "./llm/fake";

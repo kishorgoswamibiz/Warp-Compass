@@ -19,6 +19,15 @@ already reflects whatever every other persona has contributed. Concretely, for a
 
 A persona is identified by the ``said_by`` id stamped on provenance during ingest; its subgraph is
 every node it contributed to. (Persona↔role is 1:1 in the prototype; explicit clustering is P9.)
+
+**Retirement + orphan threads (P13).** Retiring someone never touches the graph (ADR #30), so their
+knowledge — and their unanswered questions — stay. But because gaps are scoped to the persona's own
+subgraph, a node only *they* ever touched would fall out of every brief and go silent forever. So a
+node whose contributors are ALL retired is **orphaned**, and its gaps are offered to everyone still
+in the engagement: capped, ranked below the person's own work, and framed in the third person
+because they didn't say it. Offering one to several people is intentional — two independent answers
+is exactly what promotes a fact to ``confirmed``. The pool is self-clearing: the moment a live
+persona answers, that node gains live provenance and stops being orphaned.
 """
 
 from __future__ import annotations
@@ -113,11 +122,15 @@ class Planner:
         ontology: Ontology,
         *,
         max_threads: int = 6,
+        orphan_max: int = 2,
+        retired_personas: set[str] | frozenset[str] | None = None,
         now: str | None = None,
     ) -> None:
         self._g = graph
         self._ont = ontology
         self._max = max_threads
+        self._orphan_max = orphan_max
+        self._retired = frozenset(retired_personas or ())
         self._now = now
 
     def personas(self) -> list[str]:
@@ -125,6 +138,10 @@ class Planner:
         snap = load_snapshot(self._g)
         seen = {p.said_by for card in snap.nodes.values() for p in card.provenance}
         return sorted(seen)
+
+    def live_personas(self) -> list[str]:
+        """Contributing personas still here — the ones a brief is actually worth building for."""
+        return [p for p in self.personas() if p not in self._retired]
 
     def plan(self, persona_id: str, *, session_id: str) -> SessionBrief:
         snap = load_snapshot(self._g)
@@ -172,6 +189,20 @@ class Planner:
                     followups=followups,
                 )
             )
+        # Questions left behind by retired teammates, appended AFTER this person's own work so the
+        # rank floor is structural: they can never outrank a thread about the person's own role.
+        for t in self._orphan_threads(snap, report, subgraph_ids)[: self._orphan_max]:
+            opener, followups = _orphan_opener_and_followups(t)
+            brief_threads.append(
+                BriefThread(
+                    id=f"orphan.{t.id}",
+                    goal=t.goal,
+                    why=_ORPHAN_WHY,
+                    priority=len(brief_threads) + 1,
+                    suggested_opener=opener,
+                    followups=followups,
+                )
+            )
         reserve = [t.id for t in threads[self._max :]]
         summary = self._persona_summary(persona_id, subgraph_ids, snap, report)
 
@@ -185,8 +216,34 @@ class Planner:
         )
 
     def plan_all(self, *, session_id: str) -> list[SessionBrief]:
-        """A brief for every contributing persona (cold start emits none)."""
-        return [self.plan(pid, session_id=session_id) for pid in self.personas()]
+        """A brief for every contributing persona still in the engagement (cold start emits none).
+
+        Retired personas are skipped here rather than filtered downstream: computing a brief costs
+        a full completeness pass, and nobody would ever read it.
+        """
+        return [self.plan(pid, session_id=session_id) for pid in self.live_personas()]
+
+    # --- orphan threads (P13) ---
+
+    def _orphan_threads(self, snap, report, subgraph_ids: set[str]) -> list[OpenThread]:
+        """Gaps on nodes whose every contributor has been retired — nobody's subgraph owns them."""
+        if not self._retired:
+            return []
+        orphan_ids = {
+            nid
+            for nid, card in snap.nodes.items()
+            if nid not in subgraph_ids
+            and card.provenance
+            and {p.said_by for p in card.provenance} <= self._retired
+        }
+        if not orphan_ids:
+            return []
+        gaps = [
+            g
+            for g in report.gaps
+            if g.node_id in orphan_ids and g.kind not in _CROSS_PERSONA_GAP_KINDS
+        ]
+        return threads_from_gaps(gaps, now=self._now)
 
     # --- persona summary ---
 
@@ -215,6 +272,54 @@ class Planner:
         if n_problems:
             parts.append(f"{n_problems} problem{'s' if n_problems != 1 else ''} raised")
         return "; ".join(parts) + "."
+
+
+# --- orphan-thread copy (P13) -----------------------------------------------------------------
+# A question inherited from someone who left. The normal openers presume ownership ("what do YOU
+# need in hand") which would be plainly wrong here, so orphans get their own third-person copy —
+# and an explicit escape hatch, because "I don't know" is a perfectly good answer to someone
+# else's process.
+
+_ORPHAN_WHY = (
+    "Raised by a teammate who is no longer in the engagement. The question is still open about how "
+    "the business works, so anyone who knows can close it."
+)
+
+_ORPHAN_DONT_KNOW = {
+    "if": "they don't know",
+    "ask": "No problem — who would be the right person to ask about that?",
+}
+
+_ORPHAN_FIELD_ASK: dict[str, str] = {
+    "trigger": "what kicks it off",
+    "inputs": "what's needed in hand to start it",
+    "system": "which tool or screen it happens in",
+    "output": "what it produces",
+    "next_handoff": "who picks it up afterwards",
+    "exceptions": "what throws it off",
+    "rules": "what rules or policies govern it",
+}
+
+
+def _orphan_opener_and_followups(t: OpenThread) -> tuple[str, list[dict[str, str]]]:
+    name = t.node_name or "that step"
+    if t.kind == GapKind.MISSING_FIELD.value and t.field:
+        ask = _ORPHAN_FIELD_ASK.get(t.field, f"the {t.field}")
+        return (
+            f"A colleague described '{name}' before they left the project, but we never captured "
+            f"{ask}. Do you know how that part works?",
+            [_ORPHAN_DONT_KNOW],
+        )
+    if t.kind == GapKind.BROKEN_CHAIN.value:
+        return (
+            f"'{name}' came up from a colleague who has since left, and we can't see how it "
+            "connects to the rest of the process. Can you place it?",
+            [{"if": "they place it", "ask": "What comes immediately before and after it?"}],
+        )
+    return (
+        f"A colleague raised '{name}' before they left the project. Do you know how that works?",
+        [_ORPHAN_DONT_KNOW],
+    )
 
 
 # --- opener + followup scaffolding (deterministic; an LLM may later enrich) -------------------

@@ -17,6 +17,7 @@ interface PushBody {
   participant_id?: string;
   persona_id?: string;
   display_name?: string;
+  role_title?: string;
   answer_log?: { session_id?: string };
 }
 
@@ -60,7 +61,11 @@ export async function handleSyncPush(req: Request, env: Env): Promise<Response> 
     action: "push_answer_log",
     secret: env.SYNC_SHARED_SECRET,
     participant_id: body.participant_id,
-    profile: { persona_id: body.persona_id, display_name: body.display_name },
+    profile: {
+      persona_id: body.persona_id,
+      display_name: body.display_name,
+      role_title: body.role_title, // P13: declared identity, used for profile.json + README.md
+    },
     answer_log: body.answer_log,
   };
 

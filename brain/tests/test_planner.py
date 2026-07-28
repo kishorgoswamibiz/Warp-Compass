@@ -179,3 +179,88 @@ def test_persona_summary_mentions_role_and_activity():
     brief = _planner(g).plan("persona.A", session_id="s")
     assert "rep" in brief.persona_summary.lower()
     assert "activit" in brief.persona_summary.lower()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 13 — retirement + the orphan thread pool.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_retired_persona_is_not_planned_for():
+    g = FakeGraphStore()
+    _bare_activity(g, "act.a", "Take order", persona="persona.A", role_id="role.rep")
+    _bare_activity(g, "act.b", "Pack order", persona="persona.B", role_id="role.wh")
+
+    planner = _planner(g, retired_personas={"persona.B"})
+    assert planner.personas() == ["persona.A", "persona.B"]  # the graph still holds their work
+    assert planner.live_personas() == ["persona.A"]  # ...but nobody is there to read a brief
+    assert [b.persona_id for b in planner.plan_all(session_id="s")] == ["persona.A"]
+
+
+def test_orphaned_nodes_questions_are_offered_to_whoever_is_still_here():
+    """P13 Finding 2 — a departed teammate's open questions must not go silent.
+
+    Gaps are scoped to a persona's own subgraph, so a node only the retired person ever touched
+    belongs to nobody. Those gaps become low-priority, third-person threads on everyone else's
+    brief, because the question is about the business, and the business is still here.
+    """
+    g = FakeGraphStore()
+    _bare_activity(g, "act.mine", "Take order", persona="persona.A", role_id="role.rep")
+    _bare_activity(g, "act.theirs", "Reconcile invoices", persona="persona.GONE", role_id="role.fin")
+
+    brief = _planner(g, retired_personas={"persona.GONE"}).plan("persona.A", session_id="s")
+    orphans = [t for t in brief.open_threads if t.id.startswith("orphan.")]
+
+    assert orphans, "the retired person's gaps should have been re-offered"
+    assert all("Reconcile invoices" in t.suggested_opener for t in orphans)
+    # Third-person framing: they didn't say it, so we must not imply they did.
+    assert all("colleague" in t.suggested_opener for t in orphans)
+    assert all("no longer in the engagement" in t.why for t in orphans)
+    # An "I don't know" escape hatch — it's someone else's process.
+    assert any("right person to ask" in f["ask"] for t in orphans for f in t.followups)
+    validate(instance=brief.to_dict(), schema=_SCHEMA)
+
+
+def test_orphan_threads_rank_below_the_persons_own_work_and_are_capped():
+    g = FakeGraphStore()
+    _bare_activity(g, "act.mine", "Take order", persona="persona.A", role_id="role.rep")
+    _bare_activity(g, "act.t1", "Reconcile invoices", persona="persona.GONE", role_id="role.fin")
+    _bare_activity(g, "act.t2", "Chase debtors", persona="persona.GONE", role_id="role.fin")
+
+    brief = _planner(g, retired_personas={"persona.GONE"}, orphan_max=2).plan(
+        "persona.A", session_id="s"
+    )
+    own = [t for t in brief.open_threads if not t.id.startswith("orphan.")]
+    orphans = [t for t in brief.open_threads if t.id.startswith("orphan.")]
+
+    assert len(orphans) == 2  # capped
+    assert own, "the person's own threads must still be there"
+    # The rank floor is structural: every orphan sits below every own thread.
+    assert max(t.priority for t in own) < min(t.priority for t in orphans)
+    # Ranks stay contiguous from 1 so the contract holds.
+    assert [t.priority for t in brief.open_threads] == list(
+        range(1, len(brief.open_threads) + 1)
+    )
+    validate(instance=brief.to_dict(), schema=_SCHEMA)
+
+
+def test_a_node_with_one_live_contributor_is_not_orphaned():
+    """Shared knowledge stays owned — this is why retirement can leave the graph alone."""
+    g = FakeGraphStore()
+    _bare_activity(g, "act.shared", "Take order", persona="persona.A", role_id="role.rep")
+    # persona.GONE also spoke about it; A is still here, so it is A's to answer for.
+    g.nodes["act.shared"].provenance.append(_prov("persona.GONE"))
+
+    brief = _planner(g, retired_personas={"persona.GONE"}).plan("persona.A", session_id="s")
+    assert not [t for t in brief.open_threads if t.id.startswith("orphan.")]
+
+
+def test_no_retirements_means_no_orphan_threads_at_all():
+    g = FakeGraphStore()
+    _bare_activity(g, "act.a", "Take order", persona="persona.A", role_id="role.rep")
+    _bare_activity(g, "act.b", "Pack order", persona="persona.B", role_id="role.wh")
+
+    brief = _planner(g).plan("persona.A", session_id="s")
+    assert not [t for t in brief.open_threads if t.id.startswith("orphan.")]
+    # persona.B's gaps stay persona.B's problem — unchanged pre-P13 behaviour.
+    assert all("Pack order" not in (t.suggested_opener or "") for t in brief.open_threads)

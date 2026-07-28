@@ -28,19 +28,25 @@ _STATUS_MARKER = {
 }
 
 
-def render_markdown(docs: GeneratedDocs) -> str:
+#: persona_id -> "Rahul Mehta (Business Analyst)". Supplied by the CLI from the bus profiles (P13);
+#: an id with no entry renders as the raw id, so a retired, unknown, or pre-P13 persona still works.
+PersonaNames = dict[str, str]
+
+
+def render_markdown(docs: GeneratedDocs, names: PersonaNames | None = None) -> str:
     """The full deliverable: end-to-end process, per-role SOPs, and the problem register."""
     mode = "all knowledge" if docs.include_unverified else "confirmed knowledge only"
+    names = names or {}
     parts = [
         "# Process Documentation",
         "",
         f"_Generated from the live knowledge graph — {mode}. Regenerate any time; this is a "
         "living view, not a one-off export._",
         "",
-        _render_end_to_end(docs.end_to_end),
-        _render_categories(docs.categories),
-        _render_sops(docs.sops),
-        _render_problems(docs.problems, docs.orphan_desires),
+        _render_end_to_end(docs.end_to_end, names),
+        _render_categories(docs.categories, names),
+        _render_sops(docs.sops, names),
+        _render_problems(docs.problems, docs.orphan_desires, names),
     ]
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
@@ -52,22 +58,27 @@ def _marker(status: str) -> str:
     return _STATUS_MARKER.get(status, "")
 
 
-def _trace(node: DocNode) -> str:
+def _who(said_by: str, names: PersonaNames) -> str:
+    """A person's name where we know it; the raw persona id where we don't (never a blank)."""
+    return names.get(said_by, said_by)
+
+
+def _trace(node: DocNode, names: PersonaNames) -> str:
     if not node.sources:
         return "_(source: unknown)_"
     head = node.sources[0]
     extra = f" +{len(node.sources) - 1} more" if len(node.sources) > 1 else ""
-    return f"_(source: {head.said_by} @ {head.ts[:10]}{extra})_"
+    return f"_(source: {_who(head.said_by, names)} @ {head.ts[:10]}{extra})_"
 
 
-def _node_line(node: DocNode, *, prefix: str = "- ") -> str:
-    return f"{prefix}**{node.name}**{_marker(node.status)} — {_trace(node)}"
+def _node_line(node: DocNode, names: PersonaNames, *, prefix: str = "- ") -> str:
+    return f"{prefix}**{node.name}**{_marker(node.status)} — {_trace(node, names)}"
 
 
 # --- 1) end-to-end ----------------------------------------------------------------------------
 
 
-def _render_end_to_end(e2e: EndToEnd) -> str:
+def _render_end_to_end(e2e: EndToEnd, names: PersonaNames) -> str:
     lines = ["## 1. End-to-End Process", ""]
     if e2e.unbroken:
         lines.append("✅ The process forms one connected chain from a first trigger to a final "
@@ -85,7 +96,7 @@ def _render_end_to_end(e2e: EndToEnd) -> str:
         lines.append("### Walkthrough")
         lines.append("")
         for i, step in enumerate(e2e.narrative, start=1):
-            lines.append(f"{i}. {step.line} {_trace(step.node)}")
+            lines.append(f"{i}. {step.line} {_trace(step.node, names)}")
         lines.append("")
 
     if e2e.gaps:
@@ -155,7 +166,7 @@ def _esc(text: str) -> str:
 # --- section numbering ------------------------------------------------------------------------
 
 
-def _render_categories(sections: list[CategorySection]) -> str:
+def _render_categories(sections: list[CategorySection], names: PersonaNames) -> str:
     if not sections:
         return ""
     lines = ["## 2. Process Map by Category", "",
@@ -164,7 +175,7 @@ def _render_categories(sections: list[CategorySection]) -> str:
         lines.append(f"### {s.code} {s.label}")
         lines.append("")
         for node in s.nodes:
-            lines.append(_node_line(node))
+            lines.append(_node_line(node, names))
         lines.append("")
     return "\n".join(lines)
 
@@ -172,21 +183,21 @@ def _render_categories(sections: list[CategorySection]) -> str:
 # --- 3) SOPs ----------------------------------------------------------------------------------
 
 
-def _render_sops(sops: list[RoleSOP]) -> str:
+def _render_sops(sops: list[RoleSOP], names: PersonaNames) -> str:
     if not sops:
         return ""
     lines = ["## 3. Standard Operating Procedures (by role)", ""]
     for sop in sops:
         lines.append(f"### {sop.role.name}{_marker(sop.role.status)}")
         lines.append("")
-        lines.append(f"{_trace(sop.role)}")
+        lines.append(f"{_trace(sop.role, names)}")
         lines.append("")
         for act in sop.activities:
             lines.append(f"#### {act.node.name}{_marker(act.node.status)}")
             for label, vals in _sop_facets(act):
                 if vals:
                     lines.append(f"- **{label}:** {', '.join(vals)}")
-            lines.append(f"- {_trace(act.node)}")
+            lines.append(f"- {_trace(act.node, names)}")
             lines.append("")
     return "\n".join(lines)
 
@@ -208,7 +219,9 @@ def _sop_facets(act: SOPActivity) -> list[tuple[str, list[str]]]:
 # --- 3) problem register ----------------------------------------------------------------------
 
 
-def _render_problems(problems: list[ProblemEntry], orphan_desires: list[DocNode]) -> str:
+def _render_problems(
+    problems: list[ProblemEntry], orphan_desires: list[DocNode], names: PersonaNames
+) -> str:
     if not problems and not orphan_desires:
         return ""
     lines = ["## 4. Problem Register", ""]
@@ -229,12 +242,12 @@ def _render_problems(problems: list[ProblemEntry], orphan_desires: list[DocNode]
             lines.append(f"- **Suspected cause:** {p.suspected_cause}")
         if p.desires:
             lines.append(f"- **Wished-for:** {', '.join(d.name for d in p.desires)}")
-        lines.append(f"- {_trace(p.node)}")
+        lines.append(f"- {_trace(p.node, names)}")
         lines.append("")
     if orphan_desires:
         lines.append("### Wished-for outcomes (unlinked)")
         lines.append("")
         for d in orphan_desires:
-            lines.append(_node_line(d))
+            lines.append(_node_line(d, names))
         lines.append("")
     return "\n".join(lines)

@@ -4,7 +4,18 @@
  * offline fallback (Phase 8).
  */
 
-export { getParticipant, setDisplayName } from "./participant";
+export {
+  clearParticipant,
+  createParticipant,
+  getParticipant,
+  isOnboarded,
+  markIdentitySeeded,
+  mintParticipantId,
+  needsIdentitySeed,
+  requireParticipant,
+  slugPart,
+  updateIdentity,
+} from "./participant";
 export type { Participant, StorageLike } from "./participant";
 export { answerLogFilename, downloadAnswerLog, parseBriefFile } from "./bus";
 export { pushAnswerLog, pullLatestBrief } from "./remote";

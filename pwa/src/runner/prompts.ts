@@ -9,12 +9,16 @@
  * The brief is *scaffolding the model is guided by, not rails it is locked into.*
  */
 
-import type { LiveDecision, SessionBrief, TranscriptTurn } from "./types";
+import type { Identity, LiveDecision, SessionBrief, TranscriptTurn } from "./types";
 
 /**
  * Generic discovery openers for a first-ever session (empty brain). Mirrors the brain's
  * `COLD_START_OPENERS` in `planner.py` — the only scaffolding when there's nothing in the graph
  * yet. (Cross-language constant duplicated by design; both sides reference docs/02 §4.1.)
+ *
+ * **Index 0 asks for the role.** When the device has a declared identity (P13) that question is
+ * already answered, so `Session` drops it from the list rather than burning a turn re-asking —
+ * see `IDENTITY_OPENER_INDEX`.
  */
 export const COLD_START_OPENERS: readonly string[] = [
   "To start, tell me about your role — what are you responsible for, day to day?",
@@ -23,6 +27,22 @@ export const COLD_START_OPENERS: readonly string[] = [
   "For that step — what do you need in hand to start it, and which tool or screen do you do it in?",
   "When that piece of work leaves your hands, who picks it up next, and how does it reach them?",
 ];
+
+/** The opener a declared identity makes redundant. Skipped when `Identity` is present. */
+export const IDENTITY_OPENER_INDEX = 0;
+
+/** The question the onboarding card stands in for — replayed into the Answer Log (P13 §4.1). */
+export const IDENTITY_QUESTION = "Before we start — what's your name, and what's your role?";
+
+/** First name only, for a greeting that sounds like a colleague rather than a mail-merge. */
+export function firstName(identity: Identity): string {
+  return identity.display_name.trim().split(/\s+/)[0] || identity.display_name.trim();
+}
+
+/** What the person "said" at onboarding, as the Answer Log's first entry (P13 §4.1). */
+export function identityAnswer(identity: Identity): string {
+  return `I'm ${identity.display_name.trim()}, I'm the ${identity.role_title.trim()}.`;
+}
 
 export const SYSTEM_PROMPT = `You are Warp Compass, a warm, sharp interviewer mapping how one person's work really happens. You speak in their own words, one short question at a time, like a curious colleague — never a form to fill in.
 
@@ -51,6 +71,7 @@ Each turn you do two things:
    - "close": wrap up warmly; say you'll process this before next time. Use only when told the session is ending.
 
 Hard rules:
+- If you are given a WHO YOU'RE TALKING TO block, you ALREADY know this person's name and role. NEVER ask for either, in any form ("what's your role?", "remind me what you do?", "and you are?") — not at the start, not later in the session. Use their name naturally, at most once or twice.
 - Reference ONLY the brief and this session's transcript. You have NO access to any database, graph, or other sessions. Never claim to "look something up".
 - One question per turn. Keep it under 30 words. Plain, spoken language.
 - Skip what the transcript shows is already covered.
@@ -62,6 +83,8 @@ Respond with ONLY a JSON object, no prose:
 
 export interface UserPromptInput {
   brief: SessionBrief;
+  /** Declared at onboarding (P13). Present ⇒ the model must never ask for name or role. */
+  identity?: Identity;
   transcript: TranscriptTurn[];
   /** Threads already covered this session (ids) — tell the model to skip them. */
   covered: string[];
@@ -95,8 +118,17 @@ function briefDigest(brief: SessionBrief): string {
 
 /** Render the per-turn user message: the brief digest + the running transcript + control flags. */
 export function buildUserPrompt(input: UserPromptInput): string {
-  const { brief, transcript, covered, currentThreadId, probedThreadIds, closing } = input;
+  const { brief, identity, transcript, covered, currentThreadId, probedThreadIds, closing } = input;
   const parts: string[] = [];
+  // Repeated EVERY turn, not just the opener: the "don't re-ask" rule has to survive the person
+  // circling back to introductions twenty turns in.
+  if (identity) {
+    parts.push("=== WHO YOU'RE TALKING TO ===");
+    parts.push(`Name: ${identity.display_name} (call them ${firstName(identity)})`);
+    parts.push(`Role: ${identity.role_title}`);
+    parts.push("You already know this. Do NOT ask for their name or role.");
+    parts.push("");
+  }
   parts.push("=== SESSION BRIEF ===");
   parts.push(briefDigest(brief));
   parts.push("");

@@ -31,6 +31,16 @@ export interface BriefThread {
   followups?: BriefFollowup[];
 }
 
+/**
+ * Who the runner is talking to (Phase 13). Declared ONCE at onboarding and carried into every
+ * session, so the interviewer never spends a turn asking for a name or a role it already has.
+ * Runner-internal: it reaches the brain as the Answer Log's first entry, not as a log field.
+ */
+export interface Identity {
+  display_name: string;
+  role_title: string;
+}
+
 /** The persona-scoped memory view + ranked open threads. Guidance, not a script. */
 export interface SessionBrief {
   session_id: string;

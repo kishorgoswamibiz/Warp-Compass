@@ -14,10 +14,17 @@
  */
 
 import { AnswerLogBuilder } from "./answerlog";
-import { buildUserPrompt, isLiveDecision, SYSTEM_PROMPT } from "./prompts";
+import {
+  buildUserPrompt,
+  firstName,
+  identityAnswer,
+  IDENTITY_QUESTION,
+  isLiveDecision,
+  SYSTEM_PROMPT,
+} from "./prompts";
 import { Session } from "./session";
 import { LLMError } from "./types";
-import type { ActionKind, LiveDecision, LLMProvider, SessionBrief } from "./types";
+import type { ActionKind, Identity, LiveDecision, LLMProvider, SessionBrief } from "./types";
 
 export const CLOSING_UTTERANCE =
   "That's really helpful — thank you. I'll take some time to make sense of all this before we next talk. Have a good one.";
@@ -36,40 +43,78 @@ export interface RunnerClock {
   now(): string;
 }
 
+export interface RunnerOptions {
+  participantId?: string;
+  /** Declared at onboarding (P13): greets by name, and stops the model re-asking name/role. */
+  identity?: Identity;
+  /**
+   * Seed the Answer Log's first entry with what the person declared at onboarding, so the brain
+   * mints their Role node from turn zero (P13 §4.1). Set only on the FIRST session that reaches
+   * the brain — otherwise every round re-ingests the same introduction.
+   */
+  seedIdentity?: boolean;
+}
+
 export class Runner {
   readonly session: Session;
   readonly log: AnswerLogBuilder;
+  private readonly identity?: Identity;
 
   constructor(
     brief: SessionBrief,
     private readonly llm: LLMProvider,
     private readonly clock: RunnerClock,
-    opts: { participantId?: string } = {},
+    opts: RunnerOptions = {},
   ) {
-    this.session = new Session(brief);
+    this.identity = opts.identity;
+    this.session = new Session(brief, opts.identity);
     this.log = new AnswerLogBuilder(
       brief.session_id,
       brief.persona_id,
       opts.participantId ?? brief.persona_id, // prototype: participant maps 1:1 to persona
     );
+    if (opts.seedIdentity && opts.identity) {
+      // Free narration, because the person volunteered it rather than answering a brief thread.
+      // The extractor abstracts the personal name away and keeps the ROLE (P12 §8), which is
+      // exactly what we want in the graph.
+      this.log.appendSeed({
+        raw_answer: identityAnswer(opts.identity),
+        ts: this.clock.now(),
+        kind: "free_narration",
+        thread_id: null,
+        agent_utterance: IDENTITY_QUESTION,
+      });
+    }
   }
 
   /**
    * The opening utterance. Deterministic: a generic opener on a cold start, otherwise the
    * top-priority thread's suggested opener (scaffolding the runner may reword — not rails).
+   *
+   * With a declared identity (P13) the opener is prefixed with a greeting and the "tell me about
+   * your role" cold-start question is dropped entirely — this is the turn P13 exists to save.
    */
   start(): string {
     const s = this.session;
     if (s.brief.cold_start || s.brief.open_threads.length === 0) {
       s.currentThreadId = null;
-      s.lastAgentUtterance = s.nextColdStartOpener();
+      s.lastAgentUtterance = this.greet(s.nextColdStartOpener(), true);
       return s.lastAgentUtterance;
     }
     const top = s.nextThread();
     s.currentThreadId = top ? top.id : null;
-    s.lastAgentUtterance =
-      top?.suggested_opener ?? top?.goal ?? s.nextColdStartOpener();
+    const opener = top?.suggested_opener ?? top?.goal ?? s.nextColdStartOpener();
+    s.lastAgentUtterance = this.greet(opener, false);
     return s.lastAgentUtterance;
+  }
+
+  /** Prefix an opener with a first-name greeting when we know who this is. */
+  private greet(opener: string, cold: boolean): string {
+    if (!this.identity) return opener;
+    const who = firstName(this.identity);
+    return cold
+      ? `Hi ${who} — you're the ${this.identity.role_title}. ${opener}`
+      : `Welcome back, ${who}. ${opener}`;
   }
 
   /**
@@ -155,6 +200,7 @@ export class Runner {
     const s = this.session;
     const user = buildUserPrompt({
       brief: s.brief,
+      identity: this.identity,
       transcript: s.transcript,
       covered: s.coveredIds(),
       currentThreadId: s.currentThreadId,

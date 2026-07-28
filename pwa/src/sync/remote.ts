@@ -29,7 +29,10 @@ export async function pushAnswerLog(log: AnswerLog, participant: Participant): P
     body: JSON.stringify({
       participant_id: participant.participant_id,
       persona_id: participant.persona_id,
+      // Declared at onboarding (P13). Apps Script merges these into profile.json and renders the
+      // folder's README.md, which is what makes the Drive tree readable.
       display_name: participant.display_name,
+      role_title: participant.role_title,
       answer_log: log,
     }),
   });

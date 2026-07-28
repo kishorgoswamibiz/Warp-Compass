@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { Runner } from "./runner";
 import { FakeLLMProvider } from "./llm/fake";
-import { COLD_START_OPENERS } from "./prompts";
+import { COLD_START_OPENERS, IDENTITY_OPENER_INDEX, IDENTITY_QUESTION } from "./prompts";
 import { validateAnswerLog } from "./validate";
 import type { LiveDecision, SessionBrief } from "./types";
 import type { RunnerClock } from "./runner";
@@ -176,5 +176,103 @@ describe("answer log contract", () => {
     const res = validateAnswerLog(log);
     expect(res.errors).toEqual([]);
     expect(res.valid).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 13 — a DECLARED identity means the role is never asked for again.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const identity = { display_name: "Rahul Mehta", role_title: "Business Analyst" };
+
+describe("declared identity (P13)", () => {
+  it("greets by first name and SKIPS the 'tell me about your role' opener", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
+    const opener = runner.start();
+
+    expect(opener).toContain("Hi Rahul");
+    expect(opener).toContain("Business Analyst");
+    // The whole point of P13: opener 0 asks for the role, so it must not be used.
+    expect(opener).not.toContain(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
+    expect(opener).toContain(COLD_START_OPENERS[1]); // straight to mapping the day
+  });
+
+  it("never reaches the role opener on later cold-start turns either", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
+    const seen = [runner.start()];
+    for (let i = 0; i < COLD_START_OPENERS.length + 2; i += 1) {
+      seen.push(runner.session.nextColdStartOpener());
+    }
+    expect(seen.join(" | ")).not.toContain(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
+  });
+
+  it("welcomes a returning person back before the top thread's opener", () => {
+    const runner = new Runner(seededBrief(), new FakeLLMProvider([]), clock, { identity });
+    const opener = runner.start();
+    expect(opener).toBe("Welcome back, Rahul. Walk me through what kicks off 'Take order'.");
+    expect(runner.session.currentThreadId).toBe("t1");
+  });
+
+  it("tells the model who it is talking to, every turn", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "opener", utterance: "And then?" }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock, { identity });
+    runner.start();
+    await runner.respond("I take the order.");
+
+    const prompt = llm.calls[0].user;
+    expect(prompt).toContain("WHO YOU'RE TALKING TO");
+    expect(prompt).toContain("Rahul Mehta");
+    expect(prompt).toContain("Business Analyst");
+    expect(prompt).toContain("Do NOT ask for their name or role");
+  });
+
+  it("without an identity, behaviour is byte-identical to pre-P13", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock);
+    expect(runner.start()).toBe(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
+  });
+});
+
+describe("identity seed entry (P13 §4.1)", () => {
+  it("becomes the log's FIRST entry and still validates against the contract", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "opener", utterance: "What starts your day?" }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock, { identity, seedIdentity: true });
+    runner.start();
+    await runner.respond("Orders land in my inbox each morning.");
+
+    const log = runner.log.build();
+    expect(log.entries).toHaveLength(2);
+
+    const seed = log.entries[0];
+    expect(seed.raw_answer).toBe("I'm Rahul Mehta, I'm the Business Analyst.");
+    expect(seed.agent_utterance).toBe(IDENTITY_QUESTION);
+    expect(seed.kind).toBe("free_narration");
+    expect(seed.thread_id).toBeNull();
+
+    // The brain must not need to special-case it.
+    const res = validateAnswerLog(log);
+    expect(res.errors).toEqual([]);
+    expect(res.valid).toBe(true);
+  });
+
+  it("is not counted as an answer the person gave", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "opener", utterance: "And then?" }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock, { identity, seedIdentity: true });
+    runner.start();
+    await runner.respond("Orders land in my inbox.");
+
+    expect(runner.log.count()).toBe(2); // what goes to the brain
+    expect(runner.log.answerCount()).toBe(1); // what the UI reports
+  });
+
+  it("is omitted when the device has already seeded it", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
+    runner.start();
+    expect(runner.log.build().entries).toHaveLength(0);
   });
 });

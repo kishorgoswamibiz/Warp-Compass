@@ -176,3 +176,33 @@ def test_problem_register_links_activity_attributes_and_desire():
     assert "**Affects:** Take order" in md
     assert "**Frequency:** daily" in md
     assert "**Wished-for:** Auto-import orders" in md
+
+
+# --- 6) persona display names (P13) ---------------------------------------------------------
+
+
+def test_persona_ids_render_as_people_when_names_are_known():
+    """The deliverable is read by humans; a slug tells them nothing about who said what."""
+    docs = DocGenerator(_connected_org(), ONT).generate()
+    md = render_markdown(
+        docs,
+        {
+            "persona.rep": "Asha Rao (Sales Rep)",
+            "persona.wh": "Rahul Mehta (Business Analyst), retired",
+        },
+    )
+    assert "source: Asha Rao (Sales Rep) @ 2026-06-29" in md
+    assert "source: Rahul Mehta (Business Analyst), retired @ 2026-06-29" in md
+    assert "persona.rep" not in md
+
+
+def test_an_unknown_persona_falls_back_to_its_raw_id_never_a_blank():
+    docs = DocGenerator(_connected_org(), ONT).generate()
+    md = render_markdown(docs, {"persona.rep": "Asha Rao (Sales Rep)"})  # persona.wh unmapped
+    assert "source: Asha Rao (Sales Rep) @" in md
+    assert "source: persona.wh @" in md
+
+
+def test_rendering_without_a_name_map_is_unchanged():
+    docs = DocGenerator(_connected_org(), ONT).generate()
+    assert render_markdown(docs) == render_markdown(docs, {})

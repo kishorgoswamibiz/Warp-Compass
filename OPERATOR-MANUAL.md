@@ -49,7 +49,7 @@ cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"
 ```powershell
 uv run pytest -q
 ```
-Expect **72 passed** (the whole suite runs with no services now). Skip if you're in a hurry.
+Expect **100 passed** (the whole suite runs with no services now). Skip if you're in a hurry.
 
 ### Step 4 — Run the round (the core step)
 ```powershell
@@ -85,6 +85,233 @@ uploads them automatically. Confirm the Drive tray shows "up to date." **Nothing
 user's next session auto-pulls their brief and starts warm.
 
 That's the round. 🎉
+
+---
+
+## 1b. Who's in the engagement (new in P13)
+
+Each person declares their **name and role once**, on their own device, the first time they open the
+app. That declaration becomes their folder name and their fingerprint on every fact they contribute,
+so the Drive tree and the graph both read in plain English:
+
+```
+%BUS_ROOT%\participants\
+    rahul-mehta-business-analyst-3c1f\   ← was p_3f9a1c8e-…
+        README.md            ← name, role, first/last seen, session count
+        profile.json · answer_logs\ · briefs\
+```
+
+See the roster at any time:
+
+```powershell
+uv run python -m warp_compass_brain.cli list-participants
+```
+
+> **Ids are permanent.** A person's id is stamped into every fact they contribute, so it is never
+> rewritten. If someone typos their name, they can correct it in the app — the *display* name
+> updates everywhere, the id stays. That's intentional (ADR #29).
+
+---
+
+## 1c. Removing one person (a seat changes hands)
+
+> **Which one do I want?**
+> · One person leaves / a device changes hands → **this section**.
+> · Wiping everything to start a fresh testing phase → **§1d**.
+> · Just resetting the phone, keeping their answers → only Step 3 below.
+
+**What removal does and doesn't do.** It moves their folder out of the engagement and records that
+they've gone. **It does not touch the knowledge graph** — everything they told you stays (ADR #30),
+because context is shared (one activity routinely carries facts from a Business Analyst *and* a
+Project Manager) and because a half-described process is still an open question about *your
+business*, which didn't leave. Any node only they ever touched becomes an **orphan thread**, offered
+to whoever is still here, phrased in the third person: *"A colleague described 'Reconcile invoices'
+before they left, but we never captured what kicks it off. Do you know how that part works?"* The
+moment someone answers, it stops being orphaned.
+
+It takes about a second and **costs nothing** — no LLM calls.
+
+### Step 1 — Find their id
+
+```powershell
+cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"
+uv run python -m warp_compass_brain.cli list-participants
+```
+```
+  ●  Asha Rao — Sales Rep  `asha-rao-sales-rep-9f21`   logs: 4  briefs: 2  last seen 2026-07-28
+  ●  Rahul Mehta — Business Analyst  `rahul-mehta-business-analyst-3c1f`   logs: 3  briefs: 1
+```
+Or just look at the folder names in `%BUS_ROOT%\participants\` — since P13 they're readable.
+
+### Step 2 — Remove them (pick ONE path)
+
+#### Path A — the command (recommended)
+
+```powershell
+# always preview first — this changes nothing
+uv run python -m warp_compass_brain.cli retire-participant --id rahul-mehta-business-analyst-3c1f --dry-run
+
+# then do it
+uv run python -m warp_compass_brain.cli retire-participant --id rahul-mehta-business-analyst-3c1f
+```
+
+Add `--hard-delete` to delete the folder instead of archiving it. Google Drive's 30-day trash is
+the backstop either way.
+
+#### Path B — entirely by hand, in Windows Explorer
+
+Do this if the CLI isn't available, or you just prefer watching the files move.
+
+1. **Open** `%BUS_ROOT%\participants\` (e.g. `G:\My Drive\warp-compass\participants\`).
+2. **Create** `%BUS_ROOT%\_archive\` if it isn't there yet.
+3. **Move** the folder `rahul-mehta-business-analyst-3c1f\` into `_archive\`, and **rename** it to
+   include today's date so the archive sorts chronologically:
+   ```
+   %BUS_ROOT%\_archive\rahul-mehta-business-analyst-3c1f__2026-07-28\
+   ```
+   *(Or simply delete the folder if you don't want a copy — Drive keeps it in trash for 30 days.)*
+4. **Create or edit** `%BUS_ROOT%\_retired.json` in Notepad. If the file doesn't exist, create it
+   with exactly this, swapping in the id:
+   ```json
+   {
+     "retired": [
+       { "id": "rahul-mehta-business-analyst-3c1f" }
+     ]
+   }
+   ```
+   If it already exists, add another `{ "id": "..." }` object to the `retired` list (mind the comma
+   between entries). **Only `id` is required.** The extra fields below just make
+   `list-participants` read nicely:
+   ```json
+   {
+     "retired": [
+       {
+         "id": "rahul-mehta-business-analyst-3c1f",
+         "display_name": "Rahul Mehta",
+         "role_title": "Business Analyst",
+         "retired_at": "2026-07-28T09:12:00+00:00"
+       }
+     ]
+   }
+   ```
+5. **Wait for the Drive tray icon** to show "up to date."
+
+> **If you skip step 4, nothing breaks.** The next `run-round` prints a loud warning — *"persona X
+> has no participant folder and no retirement record"* — and writes them no brief. The manual path
+> is fail-safe: the worst outcome is noise, never lost data or a resurrected folder.
+>
+> **A corrupt `_retired.json` is also safe** — it's read tolerantly, treated as "nobody retired",
+> and the loud warning tells you. Just don't hand-edit it while a round is running.
+
+### Step 3 — On the device
+
+The new person taps **"Not you? Switch user"** on the landing screen, then declares their own name
+and role. They get a fresh folder and start clean.
+
+This is device-local only — it never deletes anything from the records, which is exactly why Steps 2
+and 3 are separate. Handing over a phone without Step 2 is fine (the old person's data simply
+stays); doing Step 2 without Step 3 means the old device would recreate its folder on its next push.
+
+### Step 4 — Confirm
+
+```powershell
+uv run python -m warp_compass_brain.cli list-participants
+```
+They should now show as `⏸ … retired <date>`. Run your next round normally — no brief is written for
+them, their folder is **not** recreated, and their leftover questions start appearing at the bottom
+of everyone else's briefs.
+
+### Bringing someone back
+
+Move their folder from `%BUS_ROOT%\_archive\<id>__<date>\` back to `%BUS_ROOT%\participants\<id>\`
+(drop the `__<date>` suffix from the name). That's all — the folder is the registry, so a leftover
+entry in `_retired.json` is ignored automatically once the folder exists again. Tidy the entry if
+you like; nothing depends on it.
+
+---
+
+## 1d. Wiping everything to start a fresh testing phase
+
+Use this before handing the app to a wider team, or between test rounds when you want a clean slate.
+**Everything below is destructive and intentional.** Nothing is recoverable except through Google
+Drive's 30-day trash — so if any of it matters, copy `%BUS_ROOT%` somewhere safe first.
+
+### Path A — the command (recommended)
+
+```powershell
+cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"
+
+# preview — changes nothing, prints exactly what would go
+uv run python -m warp_compass_brain.cli reset-engagement --dry-run
+
+# do it (refuses to run without --yes)
+uv run python -m warp_compass_brain.cli reset-engagement --yes
+```
+
+Add `--keep-archive` to preserve `_archive\` (previously retired people's folders).
+
+That clears: every participant folder · the whole graph · `_retired.json` · `_archive\` · the local
+vector and review-queue state.
+
+> **Clearing the vectors along with the graph is the point of doing it in one command.** A graph
+> rebuilt from scratch against a stale embedding table throws confusing `matmul`/shape errors rather
+> than an obvious "you missed a step."
+
+### Path B — entirely by hand
+
+**In the Drive folder** (`%BUS_ROOT%`, e.g. `G:\My Drive\warp-compass\`):
+
+1. Delete **everything inside** `participants\` (keep the `participants` folder itself — or don't,
+   it's recreated automatically).
+2. Delete the whole `graph\` folder.
+3. Delete `_retired.json`.
+4. Delete the `_archive\` folder.
+5. **Wait for the Drive tray icon to show "up to date"** — the deletions have to reach Google Drive,
+   not just your disk. Deleted files sit in Drive's trash for 30 days.
+
+**In the repo** (`C:\Users\Lenovo\Desktop\Warp Compass\brain\_state\`):
+
+6. Delete `vectors.sqlite`.
+7. Delete `quarantine.jsonl` and `pending_taxonomy.jsonl` if they exist.
+
+   PowerShell equivalent for steps 6–7:
+   ```powershell
+   Remove-Item "C:\Users\Lenovo\Desktop\Warp Compass\brain\_state\*" -Force -ErrorAction SilentlyContinue
+   ```
+
+### Both paths — the two steps no script can do for you
+
+8. **Clear every test device.** Open the app on each phone/browser you've tested with and tap
+   **"Not you? Switch user"** (or clear the site's data in browser settings).
+
+   This is **not cosmetic**. A device still holding a pre-reset identity will **recreate its
+   participant folder** on its next push, quietly repopulating the bus you just cleaned. Do this
+   before anyone opens the app again.
+
+9. **Deal with `deliverable.md`.** It's committed to the repo and currently holds old test data
+   (`persona.demo`, `p_alice`). Either regenerate it —
+   ```powershell
+   uv run --extra vectors python -m warp_compass_brain.cli docgen --out "..\deliverable.md"
+   ```
+   — or blank it, so a new teammate doesn't read it as a real sample.
+
+### Confirm it's clean
+
+```powershell
+uv run python -m warp_compass_brain.cli list-participants   # "No participants yet."
+uv run --extra vectors python -m warp_compass_brain.cli run-round
+```
+`run-round` should report zero participants and write no briefs. Once someone runs a session,
+`%BUS_ROOT%\graph\index.md` starts filling in again from zero.
+
+### Before the team installs
+
+- The Cloudflare Pages **Production** secrets are set: `DEEPSEEK_API_KEY`, `ELEVENLABS_API_KEY`,
+  `APPS_SCRIPT_URL`, `SYNC_SHARED_SECRET`.
+- Each tester **fully closes and reopens** the PWA once, so the service worker takes the new build
+  instead of serving a cached one.
+- Send them the URL and one line of instruction: *"Open it, type your name and role once, then just
+  talk to it."* There is nothing else for them to set up.
 
 ---
 
@@ -134,6 +361,9 @@ All from `brain/`, prefixed with `uv run [--extra vectors] python -m warp_compas
 | `plan [--persona ID] [--session ID]` | Emit per-persona Session Brief(s) from the graph. |
 | `ingest-log <path>` | Ingest a single Answer Log file by path (manual one-off). |
 | `check-models` | List which DeepSeek models your key can access. |
+| `list-participants` | Who's in the engagement — live, then retired (§1b). |
+| `retire-participant --id ID [--dry-run] [--hard-delete]` | Remove one person; the graph is untouched (§1c). |
+| `reset-engagement --yes [--dry-run] [--keep-archive]` | **Destructive:** wipe everything and start clean (§1d). |
 
 ---
 
@@ -150,6 +380,12 @@ All from `brain/`, prefixed with `uv run [--extra vectors] python -m warp_compas
 | Users still see the old app / "Import a brief file" always | Their installed PWA is on a **cached build**. Fully close & reopen the app (or reload twice); the service worker auto-updates. The import button now appears **only** when the auto-pull fails. |
 | A user's session shows the **Download Answer Log** fallback | Their push couldn't reach the sync endpoint. Check the two Cloudflare Pages secrets (`APPS_SCRIPT_URL`, `SYNC_SHARED_SECRET`) are set for **Production**; see `docs/plan/phase-11-drive-sync.md` runbook. The user can download + you drop the file into their `answer_logs/` manually as a stopgap. |
 | Still have old data in Neo4j from before P12 | One-off migration: `uv run --with neo4j python ..\scripts\migrate_neo4j_to_okf.py` (Neo4j must be running once more for the copy). Or just rebuild from Answer Logs (above). Then uninstall Neo4j Desktop. |
+| `run-round` warns *"persona X has no participant folder … and no retirement record"* | The graph holds their knowledge but the bus doesn't have them. Almost always Drive hasn't synced their folder down yet — check Explorer and re-run. If they really have left, `retire-participant --id X` so the round stops asking. **No brief was written**, so nothing is lost by re-running. |
+| An archived participant's folder keeps coming back | You're on a pre-P13 build. Update; P13 stopped `run-round` recreating folders for personas that aren't on the bus. |
+| A user is asked their name/role again | Their device's identity was cleared (Switch user, cleared site data, or a fresh install/browser). Re-declaring mints a **new** id and a new folder. Retire the old one — otherwise the same human exists as two personas, and cross-persona corroboration can read their two halves as two independent voices confirming each other. |
+| A restored participant gets no briefs | Fixed in P13 — a folder that exists overrides a stale `_retired.json` entry. If you're on an older build, delete their entry from `%BUS_ROOT%\_retired.json`. |
+| Orphan threads keep coming back round after round | Nobody has answered them yet, and the highest-priority ones re-surface each round. That's intended. To turn the pool down or off, set `PLANNER_ORPHAN_MAX=1` (or `0`) in `brain/.env`. |
+| Someone typo'd their name at onboarding | Harmless. The id is permanent by design, but the display name is what appears in `README.md`, the roster, and the deliverable — correcting it in the app propagates on their next sync. |
 
 ---
 

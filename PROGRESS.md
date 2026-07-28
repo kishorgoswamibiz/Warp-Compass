@@ -10,31 +10,37 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL PHASES DONE (P0–P12).** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL PHASES DONE (P0–P13).** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
-  **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)**. The graph is now a
-  folder of readable Markdown files at `{BUS_ROOT}/graph` (Drive-synced); the interviewer was
-  refocused on ground-up end-to-end SOP coverage. **Nothing is blocked.**
+  **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
+  identity + participant lifecycle**. The graph is a folder of readable Markdown files at
+  `{BUS_ROOT}/graph` (Drive-synced); people declare name + role once and are never asked again;
+  folders and provenance name people, not UUIDs; and a person can be retired without the graph
+  being touched. **Nothing is blocked.**
 - **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build + deployed + sync live. Optional-only work remains
   (transcript Docs, semantic conflict tier, STT field-WER eval).
-- **Last updated:** 2026-07-02 · by `agent:fable-p12`
-- **Verified:** brain `ruff` clean + `pytest` **72 passed** (the WHOLE suite — no DB/marker split
-  anymore); PWA `npm run typecheck` clean + **24 vitest**; `import neo4j` fails in the brain env
+- **Last updated:** 2026-07-28 · by `agent:opus-p13`
+- **Verified (P13):** brain `ruff` clean + `pytest` **100 passed** (the WHOLE suite — no DB/marker
+  split anymore); PWA `npm run typecheck` clean + **45 vitest** + `npm run build` green; worker
+  `typecheck` clean; the three new CLI commands smoke-tested against a scratch bus (dry-run,
+  real run, and the refuse-without-`--yes` guard). Previously: `import neo4j` fails in the brain env
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **Nothing blocked — the system is live.** Operate it: run `cli run-round` per round
-  (Answer Logs arrive automatically via Drive sync), and `cli docgen` for the deliverable. If old
-  Neo4j data matters, one-off migrate: `uv run --with neo4j python ..\scripts\migrate_neo4j_to_okf.py`;
-  otherwise the graph rebuilds from Answer Logs. Neo4j Desktop can be uninstalled.
+- **Next up:** **Nothing blocked — the system is live.** Operate it: `cli run-round` per round
+  (Answer Logs arrive automatically via Drive sync), `cli docgen` for the deliverable. New in P13:
+  `cli list-participants`, `cli retire-participant --id X`, `cli reset-engagement --yes`.
+  **Before handing the app to a wider team**, run the clean-slate procedure in
+  `OPERATOR-MANUAL.md` §1d — and note `deliverable.md` is committed with old test data
+  (`persona.demo`, `p_alice`) that should be regenerated or blanked first.
 
 ## ▶ Resume here (start every session with this)
 
 1. In a terminal, **`cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"`** — uv/Python commands ONLY
    work from this folder (running elsewhere gives `No module named 'warp_compass_brain'`).
-2. Sanity check: `uv run pytest -q` → expect **72 passed** (no database needed — P12).
-3. **All build phases (P0–P12) are DONE.** Operating routine is `OPERATOR-MANUAL.md`. To regenerate
+2. Sanity check: `uv run pytest -q` → expect **100 passed** (no database needed — P12).
+3. **All build phases (P0–P13) are DONE.** Operating routine is `OPERATOR-MANUAL.md`. To regenerate
    the deliverable: `uv run python -m warp_compass_brain.cli docgen [--include-unverified]
    [--out FILE]`. Keys are in `brain/.env`.
 - **Build environment:** Python 3.12 + uv (`brain/`), Node 20 + npm (`pwa/`, `worker/`).
@@ -65,7 +71,9 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P11 | 11 | Automatic Google Drive sync (kill manual export/import) | DONE | agent:opus-p11 | `apps-script/*` · `pwa/functions/{_sync.ts,sync/*}` · `pwa/src/sync/remote.ts` (+6 tests) · auto push/pull wired · **owner Google setup DONE + tested end-to-end** (runbook in phase-11 doc) | 2026-07-01 |
 | P12 | 12 | OKF Markdown graph store — Neo4j removed; interviewer refocused on end-to-end SOP | DONE | agent:fable-p12 | `brain/.../graphstore/okf_store.py` (replaces `neo4j_store.py`) · `config.graph_root` · `scripts/migrate_neo4j_to_okf.py` · prompts (`prompts.ts`, `planner.py`, `extractor.py`) · 72 tests all-green no-DB · ADR #28 · `docs/plan/phase-12-okf-store.md` · `OKF-vs-Neo4j-report.md` | 2026-07-02 |
 
-**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched).
+| P13 | 13 | Declared identity (name+role once) + participant lifecycle (retire / reset) | DONE | agent:opus-p13 | `pwa/src/sync/participant.ts` · `pwa/src/screens/OnboardingCard.tsx` · `pwa/src/runner/{prompts,session,runner,answerlog}.ts` · `apps-script/Code.gs` (README.md + `role_title`) · `brain/.../lifecycle.py` · `bus/{base,folder}.py` retirement · `cycle.py` Finding 1 · `planner.py` orphan pool · `docgen/render.py` names · 3 new CLI commands · 99 brain + 45 pwa tests · ADRs #29/#30 · `docs/plan/phase-13-identity-and-lifecycle.md` | 2026-07-28 |
+
+**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation).
 
 ---
 
@@ -136,6 +144,75 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 2026-07-28 · agent:opus-p13 — Phase 13 (declared identity + participant lifecycle); P13 → DONE
+- **Did:** (1) **Identity is declared once per device.** A typed onboarding card
+  (`pwa/src/screens/OnboardingCard.tsx`) collects name + role before the first session;
+  `sync/participant.ts` mints a readable, filesystem-safe slug from them
+  (`rahul-mehta-business-analyst-3c1f`) that is **immutable after minting** and doubles as the
+  Drive folder name and the graph's provenance `said_by`. `getParticipant()` now returns
+  `Participant | null` and `App.tsx` gates on it; a pre-P13 `p_<uuid>` record reads as
+  not-onboarded and is re-minted (old id kept as `previous_id`).
+  (2) **The role question is gone for good.** `session.ts` drops `COLD_START_OPENERS[0]` when an
+  identity exists, `runner.start()` greets by first name ("Hi Rahul — you're the Business
+  Analyst. …" cold / "Welcome back, Rahul. …" warm), and `buildUserPrompt` repeats a
+  `WHO YOU'RE TALKING TO` block **every turn** so the model can't re-ask twenty turns in.
+  (3) **The graph learns the role at turn zero** — the onboarding answer is seeded as the Answer
+  Log's first entry (`appendSeed`), gated by an `identity_seeded_at` stamp so only the first log
+  that actually reaches the brain carries it. `answerCount()` keeps the UI's "N answers" honest.
+  (4) **Drive is readable** — `role_title` flows through `remote.ts` → `_sync.ts` → `Code.gs`,
+  which now also renders a per-folder `README.md` (name, role, first/last seen, session count) and
+  writes the profile *after* the log so the count is current. `docgen` renders
+  "Rahul Mehta (Business Analyst)" via `lifecycle.persona_display_names`.
+  (5) **Retirement, without touching the graph (ADR #30)** — `lifecycle.py` +
+  `retire-participant` / `list-participants` / `reset-engagement`; bus gains
+  `_retired.json` + `_archive/`.
+- **Two defects found while building, both fixed (they're why this phase wasn't trivial):**
+  **Finding 1** — `cycle.py:104` fell back to the persona id when distributing briefs, and
+  `write_brief`'s `mkdir(parents=True)` then **recreated the folder the operator had just
+  archived**, silently undoing every retirement. Removed the fallback; a brief now goes only to a
+  live participant, and a persona with no folder is either *retired* (silent, counted) or
+  *missing* (loud warning — that distinction is the entire reason `_retired.json` exists rather
+  than inferring retirement from an absent folder). Regression test asserts the folder is still
+  gone after a round.
+  **Finding 2** — gaps are scoped to a persona's own subgraph, so a node only a retired person
+  ever touched fell out of every brief and went **permanently silent**. Added the orphan thread
+  pool in `planner.py`: nodes whose contributors are all retired are re-offered to every live
+  persona, capped (`planner_orphan_max`, default 2), ranked below their own work, and phrased in
+  the third person with an "I don't know / who would know?" escape hatch. Self-clearing — one
+  answer from a live persona and the node stops being orphaned.
+- **Also caught in smoke testing:** `reset-engagement --bus <scratch>` resolved the graph root and
+  the `_state/` paths from *settings*, not from the bus it was pointed at — so resetting a scratch
+  bus deleted the real graph root's siblings and wiped `brain/_state/vectors.sqlite`. It did wipe
+  mine during testing (harmless — gitignored, rebuilds on next ingest, and it was stale June test
+  data). Both now scope correctly: the graph resolves against the given bus, and `_state/` is only
+  cleared when resetting the *configured* bus. Regression test added.
+- **Two more defects found on post-implementation review, both fixed:** (a) the **download
+  fallback marked the identity as seeded** — if the operator then never dropped that file into
+  `answer_logs/`, the Role node was lost and no later session would re-seed it. Only a successful
+  *push* marks it now; erring the other way costs one duplicate introduction that merges harmlessly.
+  (b) **A restored participant silently got no briefs** — folder back from `_archive/` but marker
+  still in `_retired.json` meant `cycle` mapped them while the Planner excluded them.
+  `lifecycle.effective_retired()` now defines retired as *marked AND absent from the bus*, so the
+  folder wins. Both have regression tests (**100 brain tests** now).
+- **Risk register (as built)** is `docs/plan/phase-13-identity-and-lifecycle.md` §14. The two worth
+  a decision before real client data: **readable ids are guessable** (P13 traded an unguessable
+  UUID for a slug + 4 hex, so any legitimate app user could push into another's folder — fine for
+  trusted colleagues, needs a per-participant token otherwise), and **one human can become two
+  personas** (re-onboarding after clearing site data splits their knowledge, and corroboration can
+  read the halves as two voices).
+- **Next:** Nothing blocked. Before the wider-team rollout run `OPERATOR-MANUAL.md` §1d
+  (clean slate) — and note **`deliverable.md` is committed with old test data** (`persona.demo`,
+  `p_alice`); regenerate or blank it so a new teammate doesn't read it as a real sample.
+- **Gotchas:** (1) **Participant ids are immutable** — they're stamped into provenance; correct a
+  typo'd name via `display_name` only, never the id (ADR #29). (2) The seeded identity entry's
+  `raw_answer` is assembled from form fields, a documented deviation from strict verbatim-ness,
+  chosen over editing the frozen `answer-log.schema.json` (`additionalProperties: false`).
+  (3) A successor in the same seat reads as a **second corroborating voice**, mildly inflating
+  confidence — accepted; a `replaces:` lineage field would fix it if it ever matters.
+  (4) `test_lifecycle.py::test_retiring_leaves_the_graph_byte_identical` hashes the graph tree
+  before/after — if that ever fails, ADR #30 has been broken and the whole cost/risk argument for
+  this design goes with it.
 
 ### 2026-07-02 · agent:fable-p12 — Phase 12 (OKF graph store, Neo4j removed) + interviewer refocus; P12 → DONE
 - **Did:** (1) **Replaced Neo4j with an OKF Markdown bundle store** — new

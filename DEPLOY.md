@@ -11,7 +11,7 @@ pipeline so the app (PWA **and** its API key-proxy) deploys automatically on eve
 |------|---------------|-----------|
 | **PWA** (`pwa/`, the phone app) | Cloudflare Pages (static) | ✅ via this pipeline |
 | **Key proxy** (`pwa/functions/`, `/llm` `/stt` `/tts`) | Cloudflare Pages **Functions** (same project, same origin) | ✅ via this pipeline |
-| **Brain** (`brain/`, the Python graph engine) | Your laptop + Neo4j Desktop | ❌ runs locally only (by design — see `docs/02`) |
+| **Brain** (`brain/`, the Python graph engine) | Your laptop — **no database server** (P12: the graph is Markdown files in the Drive folder) | ❌ runs locally only (by design — see `docs/02`) |
 | `worker/` (standalone Worker) | optional | ❌ not needed; kept for a separate-origin/local setup |
 
 The PWA calls `/llm`, `/stt`, `/tts` as **relative** paths. Because the Functions live in the same
@@ -137,5 +137,11 @@ the PWA silently falls back to the manual download/import — nothing breaks.
 - **The brain isn't deployed.** Generate the docs/process locally (`cd brain && uv run python -m
   warp_compass_brain.cli docgen`), run the daily sync round (`cli run-round`), etc. The PWA only
   produces Answer Logs; the brain ingests them on your laptop.
+- **Managing people is a laptop job too** (P13). Removing one person
+  (`cli retire-participant --id X`) and wiping the engagement for a fresh testing phase
+  (`cli reset-engagement --yes`) both run locally against the Drive folder — step by step, with
+  by-hand Explorer equivalents, in `OPERATOR-MANUAL.md` §1c and §1d. **After a reset, clear every
+  test device** with the app's *Switch user*, or a stale device will recreate its participant
+  folder on its next push.
 - **Rollbacks:** Cloudflare Pages keeps every deployment — roll back to any previous one from the
   dashboard in one click.

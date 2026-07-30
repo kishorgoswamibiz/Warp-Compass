@@ -107,8 +107,11 @@ export function SessionScreen({
   const [speaking, setSpeaking] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
   const [gesture, setGesture] = useState<BotGesture | null>(null);
-  // Voice-first when a mic exists; muting only stops spoken replies, never the mic input.
-  const [voiceOn, setVoiceOn] = useState(micSupported);
+  // Spoken replies start OFF (testing phase): ElevenLabs TTS is the bulk of the credit burn and the
+  // question is always on screen anyway, so nothing is lost by staying quiet. The 🔊 button still
+  // turns it on mid-session (to demo the talking bot), and muting never touches the mic — speech-to-
+  // text transcription always runs. To restore voice-first: `useState(micSupported)`.
+  const [voiceOn, setVoiceOn] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const botRef = useRef<SVGSVGElement>(null);

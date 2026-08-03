@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     # --- Sync bus (Phase 8) ---
     bus_root: str = "./_bus"
 
+    # --- Sync-drive resilience (P14). A Google-Drive-backed bus fails *whole*: when its user-mode
+    # FS driver runs out of resources, every operation on the drive — reads and `stat` included —
+    # returns WinError 1450, which used to abort a round outright. `fsretry` backs off and retries.
+    # The default schedule spans ~15s per operation (0.5+1+2+4+8s); attempts=1 disables it. ---
+    fs_retry_attempts: int = 6
+    fs_retry_base_delay: float = 0.5
+
+    # --- Empty-completion retry. The openai SDK retries HTTP errors, but a 200 with an empty or
+    # non-JSON body isn't an error to it — and the batch model emits one occasionally, which used
+    # to abort a round. Re-asking usually succeeds; attempts=1 disables it. ---
+    llm_json_attempts: int = 3
+    llm_json_base_delay: float = 1.0
+
 
 def get_settings() -> Settings:
     return Settings()

@@ -7,7 +7,8 @@ round is to run the brain over the new answers and let the updated briefs sync b
 > **The whole job in one line:** *Open a terminal in `brain/` → run `run-round` → (optionally) `corroborate --apply` and `docgen`.*
 > Users' next sessions then start warm on their own. Do this **once per round** (e.g. once a day),
 > after people have done their sessions. **No database to start — the graph is a folder of
-> Markdown files** (P12), living inside the same Drive-synced engagement folder.
+> Markdown files** (P12) at `brain\_graph\` on local disk (P14; only the Answer Logs and briefs
+> live in the Drive-synced folder).
 
 ---
 
@@ -18,10 +19,13 @@ round is to run the brain over the new answers and let the updated briefs sync b
   (e.g. `BUS_ROOT=G:\My Drive\warp-compass`).
 - **Google Drive for Desktop** running, with the engagement folder on disk (Mirror mode, **or** Stream
   mode + the folder set *Available offline*). This is how mobile Answer Logs reach the laptop and how
-  briefs go back.
-- *(No Neo4j / no Docker / no database server — removed in P12. The knowledge graph lives at
-  `{BUS_ROOT}\graph\` as readable Markdown files, one per node; set `GRAPH_ROOT` in `brain/.env`
-  only if you want it somewhere else.)*
+  briefs go back. **Offline-available is required, not a nicety** — stream-only makes every round
+  hundreds of blocking network round-trips, and a round will either hang or die with
+  `OSError [WinError 1450] Insufficient system resources` (see §5 Troubleshooting).
+- **`GRAPH_ROOT`** in `brain/.env` pointing at **local disk** (`brain\_graph`). The graph used to
+  default into the Drive folder; P14 moved it out, because the pipeline rewrites node files hard
+  enough to exhaust Drive's filesystem driver. Nothing needs it on Drive — the phones never read it.
+- *(No Neo4j / no Docker / no database server — removed in P12.)*
 
 If you ever move machines, redo these from `brain/README.md` + `apps-script/README.md`.
 
@@ -302,7 +306,7 @@ uv run python -m warp_compass_brain.cli list-participants   # "No participants y
 uv run --extra vectors python -m warp_compass_brain.cli run-round
 ```
 `run-round` should report zero participants and write no briefs. Once someone runs a session,
-`%BUS_ROOT%\graph\index.md` starts filling in again from zero.
+`brain\_graph\index.md` starts filling in again from zero.
 
 ### Before the team installs
 
@@ -317,15 +321,16 @@ uv run --extra vectors python -m warp_compass_brain.cli run-round
 
 ## 2. Reading the knowledge graph (new in P12)
 
-The graph itself is now **human-readable Markdown** at:
+The graph itself is now **human-readable Markdown** at `GRAPH_ROOT` — on local disk since P14:
 ```
-%BUS_ROOT%\graph\
+brain\_graph\
     index.md            ← start here: counts + links per node type
     roles\ · activities\ · systems\ · artifacts\ · events\ · rules\ · problems\ · ...
 ```
 Every node is one file: YAML frontmatter (type, keywords, description, status, provenance, edges)
 plus a generated body with timestamped **Facts**, and two-way **Links / Backlinks** (`[[node-id]]`).
-Open any file in a text editor — or browse the folder on drive.google.com from anywhere.
+Open any file in a text editor. It is no longer browsable from drive.google.com — use `git log`
+on `brain/_graph/` instead, which gives you per-node history the Drive copy never had.
 
 > **Don't hand-edit the graph files** — the pipeline owns them and regenerates their bodies on every
 > write. They're for *reading* (you, other agents, the docgen). The graph stays re-derivable from
@@ -372,8 +377,11 @@ All from `brain/`, prefixed with `uv run [--extra vectors] python -m warp_compas
 |---|---|
 | `No module named 'warp_compass_brain'` | You're not in `brain/`. `cd` into it and re-run. |
 | `run-round` sees no participants / 0 logs | Drive hasn't synced, or wrong `BUS_ROOT`. Check the folder in Explorer; confirm files are on disk (available offline); verify `BUS_ROOT` in `brain/.env`. |
-| `[okf-store] WARNING: skipping unreadable node file …` | A graph file got corrupted (e.g. a bad hand-edit or interrupted Drive sync). The round continues without it. Fix: restore the file from Drive version history, or delete it and rebuild from Answer Logs (clear `ingested_logs` in the affected `profile.json`, re-run `run-round`). |
-| Graph looks wrong / want a clean rebuild | The graph is **re-derivable**: delete `%BUS_ROOT%\graph\`, clear each participant's `ingested_logs` in `profile.json`, then `run-round` (costs LLM calls). |
+| `OSError [WinError 1450] Insufficient system resources` | **Google Drive's filesystem driver gave up**, not your laptop. Once its request pool is exhausted every operation on `G:` fails — including `stat` and `mkdir` on folders that plainly exist. Fix, in order: (1) set the engagement folder **Available offline** (or switch Drive to *Mirror files*) — this is the actual fix; (2) confirm `GRAPH_ROOT` in `brain/.env` points at local disk, not into the Drive folder; (3) quit and relaunch Google Drive to reset the driver; (4) close memory hogs — the failure needs both drive churn *and* low free RAM. Since P14 the brain retries these automatically, so you'll usually see `[fs-retry] WARNING: … sync drive busy, retrying` instead of a crash. Re-running is always safe: done logs are skipped. |
+| `run-round` hangs for minutes with no output | Same root cause as the row above, but Drive is *blocking* rather than erroring, so retries can't help. Ctrl-C, make the folder available offline, re-run. Nothing is lost — the round is resumable. |
+| `[fs-retry] WARNING: … sync drive busy, retrying` on most rounds | The round survived, but the Drive folder is still stream-only. Set it **Available offline**. Raise `FS_RETRY_ATTEMPTS` in `brain/.env` only as a stopgap. |
+| `[okf-store] WARNING: skipping unreadable node file …` | A graph file got corrupted (e.g. a bad hand-edit or an interrupted write). The round continues without it. Fix: `git checkout` the file if `brain/_graph/` is committed, or delete it and rebuild from Answer Logs (clear `ingested_logs` in the affected `profile.json`, re-run `run-round`). |
+| Graph looks wrong / want a clean rebuild | The graph is **re-derivable**: delete `brain\_graph\`, clear each participant's `ingested_logs` in `profile.json`, then `run-round` (costs LLM calls). |
 | `matmul`/shape error on ingest | Mixed embedder dimensions in `brain/_state/vectors.sqlite`. Delete that file and re-run (the graph + raw logs are untouched — vectors rebuild). Then always use the **same** `--extra vectors` choice. |
 | Extractor returned empty / non-JSON | Transient DeepSeek hiccup. Just re-run `run-round` (it's resumable; done logs are skipped). |
 | `429` / rate limit from DeepSeek | Wait a moment and re-run; the round resumes where it stopped. |

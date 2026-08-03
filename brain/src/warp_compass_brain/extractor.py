@@ -6,6 +6,8 @@ candidates downstream. Output is strict JSON validated into ``ExtractionResult``
 
 from __future__ import annotations
 
+import re
+
 from pydantic import ValidationError
 
 from .llm.base import LLMError, LLMProvider
@@ -47,6 +49,22 @@ Rules:
 - No prose, no markdown — JSON only."""
 
 
+_BRACKETED = re.compile(r"\[[^\]]*\]")
+_PUNCT = " \t\r\n.,;:!?-–—…'\"()"
+
+
+def has_extractable_content(answer: str) -> bool:
+    """True if an answer carries anything worth spending an LLM call on.
+
+    Voice sessions arrive with ElevenLabs Scribe's audio-event tags standing in for non-speech
+    sound — an answer whose entire content is ``[click]`` or ``[pause]``. Strip those and there
+    is nothing left to extract, so the model returns an empty body instead of the required JSON
+    and the round dies on an answer that never had knowledge in it. Skipping these here also
+    keeps us from paying for a call whose only correct answer is ``{"nodes":[],"relations":[]}``.
+    """
+    return bool(_BRACKETED.sub(" ", answer or "").strip(_PUNCT))
+
+
 class Extractor:
     def __init__(self, llm: LLMProvider, ontology: Ontology | None = None) -> None:
         self._llm = llm
@@ -73,7 +91,13 @@ class Extractor:
         ontology (unknown type/edge, bad direction, dangling ref) rather than failing the whole
         answer — one malformed proposal must not discard the rest. The create gate is the real
         guard; this just keeps obviously-invalid proposals out of resolution.
+
+        An answer with no extractable content (see ``has_extractable_content``) returns empty
+        without calling the model at all.
         """
+        if not has_extractable_content(answer):
+            return ExtractionResult()
+
         raw = self._llm.complete_json(_SYSTEM, self._user_prompt(answer))
         if not isinstance(raw, dict):
             raise LLMError("extractor did not return a JSON object")

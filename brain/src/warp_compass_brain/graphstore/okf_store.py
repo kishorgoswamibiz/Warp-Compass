@@ -21,17 +21,25 @@ Storage model (the Warp Compass OKF profile — docs/plan/phase-12-okf-store.md 
 Writes are idempotent (merge on id / on the (type, from, to) edge triple, matching the old
 Neo4j MERGE semantics) and atomic (tmp file + ``os.replace``), so a Drive-synced bundle never
 uploads a half-written node. The brain is the bundle's only writer.
+
+**A bundle on a synced drive is slow and fails in bursts (P14).** Every mutation here is a
+whole-file rewrite, and ``add_edge`` rewrites both endpoints, so a round issues hundreds of writes —
+each of which costs Google Drive a delete-approval round-trip, and any of which can fail with
+``WinError 1450`` when the driver runs out of resources. All I/O therefore goes through `fsretry`.
+Prefer keeping the bundle on local disk (set ``GRAPH_ROOT``) and letting git version it; the bus
+folder, which is small and must be shared, is the part that genuinely needs to be on Drive.
 """
 
 from __future__ import annotations
 
-import os
 import sys
+from functools import partial
 from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
 
+from ..fsretry import atomic_write_text, read_text_or_none, retry_fs
 from ..models import ConfidenceStatus, Edge, EdgeType, NodeCard, NodeType, Provenance
 from .base import GraphStore
 
@@ -94,7 +102,10 @@ class OkfGraphStore(GraphStore):
     # --- lifecycle ---
 
     def connect(self) -> None:
-        self._root.mkdir(parents=True, exist_ok=True)
+        retry_fs(
+            partial(self._root.mkdir, parents=True, exist_ok=True),
+            what=f"create graph root {self._root}",
+        )
         self._nodes, self._edges = self._load_bundle()
         self._connected = True
         self._dirty = False
@@ -204,9 +215,11 @@ class OkfGraphStore(GraphStore):
         edges: list[Edge] = []
         for node_type, dirname in TYPE_DIRS.items():
             d = self._root / dirname
-            if not d.is_dir():
-                continue
-            for path in sorted(d.glob("*.md")):
+
+            def _list(d: Path = d) -> list[Path]:
+                return sorted(d.glob("*.md")) if d.is_dir() else []
+
+            for path in retry_fs(_list, what=f"list graph dir {dirname}/"):
                 if path.name == "index.md":
                     continue
                 parsed = self._parse_node_file(path, node_type)
@@ -231,8 +244,14 @@ class OkfGraphStore(GraphStore):
     def _parse_node_file(
         self, path: Path, expected_type: NodeType
     ) -> tuple[NodeCard, list[Edge]] | None:
+        # The read is deliberately OUTSIDE the tolerant `except` below, and OSError is no longer in
+        # it: a node silently dropped because of a busy drive would be re-created empty by the next
+        # `upsert_node`, losing every earlier fact on it. Malformed content stays tolerated.
+        text = read_text_or_none(path, what=f"read graph node {path.name}")
+        if text is None:
+            _warn(f"node file vanished while loading: {path}")
+            return None
         try:
-            text = path.read_text(encoding="utf-8")
             fm = _frontmatter(text)
             if fm is None:
                 _warn(f"skipping {path}: no YAML frontmatter")
@@ -261,7 +280,7 @@ class OkfGraphStore(GraphStore):
             if card.type is not expected_type:
                 _warn(f"{path}: type {card.type.value} filed under {expected_type.value} dir")
             return card, node_edges
-        except (KeyError, ValueError, ValidationError, yaml.YAMLError, OSError) as exc:
+        except (KeyError, ValueError, ValidationError, yaml.YAMLError) as exc:
             _warn(f"skipping unreadable node file {path}: {exc}")
             return None
 
@@ -272,7 +291,8 @@ class OkfGraphStore(GraphStore):
 
     def _persist_node(self, node_id: str) -> None:
         card = self._nodes[node_id]
-        self._atomic_write(self._node_path(card), self._render_node(card))
+        path = self._node_path(card)
+        self._atomic_write(path, self._render_node(card), what=f"write graph node {path.name}")
         self._dirty = True
 
     def _out_edges(self, node_id: str) -> list[Edge]:
@@ -396,10 +416,13 @@ class OkfGraphStore(GraphStore):
                 )
             dir_lines += ["", _GENERATED_MARK]
             d = self._root / TYPE_DIRS[t]
-            d.mkdir(parents=True, exist_ok=True)
-            self._atomic_write(d / "index.md", "\n".join(dir_lines) + "\n")
+            self._atomic_write(
+                d / "index.md", "\n".join(dir_lines) + "\n", what=f"write {d_name}/index.md"
+            )
         root_lines += ["", _GENERATED_MARK]
-        self._atomic_write(self._root / "index.md", "\n".join(root_lines) + "\n")
+        self._atomic_write(
+            self._root / "index.md", "\n".join(root_lines) + "\n", what="write graph index.md"
+        )
 
     # --- internals ---
 
@@ -407,11 +430,10 @@ class OkfGraphStore(GraphStore):
         if not self._connected:
             raise RuntimeError("GraphStore not connected; call connect() first.")
 
-    def _atomic_write(self, path: Path, text: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(text, encoding="utf-8", newline="\n")
-        os.replace(tmp, path)
+    @staticmethod
+    def _atomic_write(path: Path, text: str, *, what: str) -> None:
+        # `newline="\n"` keeps the bundle byte-identical across platforms, so git diffs stay clean.
+        atomic_write_text(path, text, what=what, newline="\n")
 
 
 def _frontmatter(text: str) -> dict | None:

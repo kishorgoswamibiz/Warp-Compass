@@ -4,15 +4,22 @@ A plain directory tree — works with any file-sync product (Drive/Dropbox/OneDr
 which is exactly the "manual stand-in for networked v1" the design calls for (DECISION #8). Reads
 are tolerant (a half-synced or malformed file is skipped, never crashes a round); writes are atomic
 (write to a temp file, then replace) so a brief is never read half-written.
+
+Every operation goes through `fsretry` (P14), because a Drive-backed bus fails *whole* — when
+Google's user-mode FS driver runs out of resources, `stat` and `mkdir` fail alongside writes. Note
+the split that module insists on: absent-or-malformed still reads as empty (the P8 contract), while
+a busy drive retries and then raises rather than reporting emptiness. Silently reporting an existing
+`profile.json` as `{}` would re-register the participant and re-ingest every Answer Log.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import shutil
+from functools import partial
 from pathlib import Path
 
+from ..fsretry import atomic_write_text, read_text_or_none, retry_fs
 from .base import Bus
 
 #: Bus-root entries that are bookkeeping, not participants. Minted participant ids can never start
@@ -52,55 +59,69 @@ class FolderBus(Bus):
     # ── registry ───────────────────────────────────────────────────────────────
     def list_participants(self) -> list[str]:
         base = self._participants_dir
-        if not base.is_dir():
-            return []
-        # `_`-prefixed entries are bookkeeping (an archive someone dropped in here by hand), never
-        # a person — a minted id always starts with an alphanumeric.
-        return sorted(p.name for p in base.iterdir() if p.is_dir() and not p.name.startswith("_"))
+
+        def _scan() -> list[str]:
+            if not base.is_dir():
+                return []
+            # `_`-prefixed entries are bookkeeping (an archive someone dropped in here by hand),
+            # never a person — a minted id always starts with an alphanumeric.
+            return sorted(
+                p.name for p in base.iterdir() if p.is_dir() and not p.name.startswith("_")
+            )
+
+        return retry_fs(_scan, what=f"list participants in {base}")
 
     def ensure_participant(self, participant_id: str) -> None:
-        (self._dir(participant_id) / "answer_logs").mkdir(parents=True, exist_ok=True)
-        (self._dir(participant_id) / "briefs").mkdir(parents=True, exist_ok=True)
+        for sub in ("answer_logs", "briefs"):
+            target = self._dir(participant_id) / sub
+            retry_fs(
+                partial(target.mkdir, parents=True, exist_ok=True),
+                what=f"create {participant_id}/{sub}",
+            )
 
     def read_profile(self, participant_id: str) -> dict:
-        path = self._dir(participant_id) / "profile.json"
-        if not path.is_file():
-            return {}
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return {}
+        return self._read_json_tolerant(
+            self._dir(participant_id) / "profile.json", what=f"read {participant_id}/profile.json"
+        )
 
     def write_profile(self, participant_id: str, profile: dict) -> None:
         self.ensure_participant(participant_id)
-        self._atomic_write(self._dir(participant_id) / "profile.json", profile)
+        self._atomic_write(
+            self._dir(participant_id) / "profile.json",
+            profile,
+            what=f"write {participant_id}/profile.json",
+        )
 
     # ── answer logs (runner -> brain) ───────────────────────────────────────────
     def list_answer_logs(self, participant_id: str) -> list[str]:
         d = self._dir(participant_id) / "answer_logs"
-        if not d.is_dir():
-            return []
-        return sorted(p.name for p in d.iterdir() if p.is_file() and p.suffix == ".json")
+
+        def _scan() -> list[str]:
+            if not d.is_dir():
+                return []
+            return sorted(p.name for p in d.iterdir() if p.is_file() and p.suffix == ".json")
+
+        return retry_fs(_scan, what=f"list {participant_id}/answer_logs")
 
     def read_answer_log(self, participant_id: str, name: str) -> dict:
         path = self._dir(participant_id) / "answer_logs" / name
-        return json.loads(path.read_text(encoding="utf-8"))
+        text = retry_fs(
+            partial(path.read_text, encoding="utf-8"),
+            what=f"read {participant_id}/answer_logs/{name}",
+        )
+        return json.loads(text)
 
     # ── briefs (brain -> runner) ────────────────────────────────────────────────
     def write_brief(self, participant_id: str, name: str, brief: dict) -> None:
         d = self._dir(participant_id) / "briefs"
-        d.mkdir(parents=True, exist_ok=True)
-        self._atomic_write(d / name, brief)
+        retry_fs(
+            partial(d.mkdir, parents=True, exist_ok=True), what=f"create {participant_id}/briefs"
+        )
+        self._atomic_write(d / name, brief, what=f"write {participant_id}/briefs/{name}")
 
     # ── retirement registry (P13) ───────────────────────────────────────────────
     def retired_records(self) -> list[dict]:
-        path = self.retired_path
-        if not path.is_file():
-            return []
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return []  # tolerant, like every other read here
+        data = self._read_json_any(self.retired_path, what=f"read {RETIRED_FILENAME}")
         records = data.get("retired") if isinstance(data, dict) else data
         return [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
 
@@ -108,8 +129,12 @@ class FolderBus(Bus):
         """Append a retirement record, replacing any earlier one for the same id (idempotent)."""
         rid = str(record.get("id", ""))
         kept = [r for r in self.retired_records() if str(r.get("id", "")) != rid]
-        self._root.mkdir(parents=True, exist_ok=True)
-        self._atomic_write(self.retired_path, {"retired": [*kept, record]})
+        retry_fs(
+            partial(self._root.mkdir, parents=True, exist_ok=True), what=f"create {self._root}"
+        )
+        self._atomic_write(
+            self.retired_path, {"retired": [*kept, record]}, what=f"write {RETIRED_FILENAME}"
+        )
 
     def move_to_archive(self, participant_id: str, archive_name: str) -> Path:
         """Move a participant's folder into ``_archive/``. Returns the new path.
@@ -118,18 +143,42 @@ class FolderBus(Bus):
         same id twice in one day must never silently overwrite the first archive.
         """
         src = self._dir(participant_id)
-        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        retry_fs(
+            partial(self.archive_dir.mkdir, parents=True, exist_ok=True),
+            what=f"create {ARCHIVE_DIRNAME}/",
+        )
         dest = self.archive_dir / archive_name
         n = 2
-        while dest.exists():
+        while retry_fs(dest.exists, what=f"stat {ARCHIVE_DIRNAME}/{dest.name}"):
             dest = self.archive_dir / f"{archive_name}-{n}"
             n += 1
-        shutil.move(str(src), str(dest))
+        retry_fs(
+            partial(shutil.move, str(src), str(dest)), what=f"archive {participant_id}"
+        )
         return dest
 
     # ── internals ───────────────────────────────────────────────────────────────
     @staticmethod
-    def _atomic_write(path: Path, data: dict) -> None:
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, path)  # atomic on the same filesystem
+    def _atomic_write(path: Path, data: dict, *, what: str) -> None:
+        atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False), what=what)
+
+    @staticmethod
+    def _read_json_any(path: Path, *, what: str):
+        """Parse a JSON file; ``{}`` when absent or malformed. A busy drive retries, then raises.
+
+        The absent/malformed tolerance is the Phase 8 contract: a file the sync client has only
+        half-written must never crash a round. A transient drive error is deliberately *not*
+        tolerated here — see the `fsretry` module docstring for what an empty read would cost.
+        """
+        text = read_text_or_none(path, what=what)
+        if text is None:
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {}
+
+    @classmethod
+    def _read_json_tolerant(cls, path: Path, *, what: str) -> dict:
+        data = cls._read_json_any(path, what=what)
+        return data if isinstance(data, dict) else {}

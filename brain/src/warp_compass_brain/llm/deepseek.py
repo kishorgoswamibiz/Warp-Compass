@@ -7,6 +7,8 @@ errors and honors ``Retry-After`` on 429; we add a tolerant JSON parse on top.
 from __future__ import annotations
 
 import json
+import sys
+import time
 
 from ..config import Settings, get_settings
 from .base import LLMError, LLMProvider
@@ -49,20 +51,41 @@ class DeepSeekProvider(LLMProvider):
         )
 
     def complete_json(self, system: str, user: str, *, temperature: float = 0.0) -> dict:
-        try:
-            resp = self._client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=temperature,
-                response_format={"type": "json_object"},
-            )
-        except Exception as e:  # network/auth/rate-limit after retries
-            raise LLMError(f"DeepSeek call failed: {type(e).__name__}: {e}") from e
-        content = resp.choices[0].message.content if resp.choices else ""
-        return _loads_tolerant(content)
+        """Ask for one strict-JSON object, re-asking if the body comes back unparseable.
+
+        The SDK's own retries cover HTTP failures; they do not cover a 200 whose body is empty
+        or isn't JSON, which this model emits occasionally. That surfaced as a round dying
+        mid-ingest, so we re-ask a few times before giving up and raise the *last* parse error.
+        """
+        attempts = max(1, self._s.llm_json_attempts)
+        last: LLMError | None = None
+        for attempt in range(attempts):
+            try:
+                resp = self._client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    temperature=temperature,
+                    response_format={"type": "json_object"},
+                )
+            except Exception as e:  # network/auth/rate-limit after retries
+                raise LLMError(f"DeepSeek call failed: {type(e).__name__}: {e}") from e
+            content = resp.choices[0].message.content if resp.choices else ""
+            try:
+                return _loads_tolerant(content)
+            except LLMError as e:
+                last = e
+                if attempt + 1 < attempts:
+                    print(
+                        f"[deepseek] WARNING: unparseable completion "
+                        f"(attempt {attempt + 1}/{attempts}), re-asking: {e}",
+                        file=sys.stderr,
+                    )
+                    time.sleep(self._s.llm_json_base_delay * (2**attempt))
+        assert last is not None  # the loop runs at least once and only exits here on failure
+        raise last
 
     def list_models(self) -> list[str]:
         """Return model IDs the key can access — used by `cli check-models`."""

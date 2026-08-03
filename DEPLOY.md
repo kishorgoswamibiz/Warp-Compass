@@ -119,6 +119,9 @@ start — no manual export/import), do the one-time **owner setup in `apps-scrip
 1. Create a Drive root folder; get it onto your laptop's disk with **Google Drive for Desktop** — either
    *Mirror files* mode, or *Stream* mode + right-click the folder → **Available offline** (not
    stream-only). Point the brain at it: `BUS_ROOT=<local path>` in `brain/.env` (or `cli run-round --bus`).
+   **Leave `GRAPH_ROOT` on local disk** (`./_graph`) — do not let the graph bundle default into the
+   Drive folder. See "When the bus is on Google Drive" in `brain/README.md` for why, and what the
+   symptom looks like if you skip either half of this (`WinError 1450`, or rounds that simply hang).
 2. Deploy `apps-script/Code.gs` as a **Web App** (*Execute as: Me*, *Access: Anyone*); set its
    `ROOT_FOLDER_ID` + `SHARED_SECRET` script properties.
 3. In the Pages project add two more **secrets**: `APPS_SCRIPT_URL` (the `/exec` URL) and

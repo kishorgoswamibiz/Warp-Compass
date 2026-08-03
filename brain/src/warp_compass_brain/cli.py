@@ -41,6 +41,14 @@ def _same_path(a: str, b: str) -> bool:
         return a == b
 
 
+def _configure_fs_retry() -> None:
+    """Apply FS_RETRY_* before any command touches a path that might live on a synced drive."""
+    from . import fsretry
+
+    s = get_settings()
+    fsretry.configure(attempts=s.fs_retry_attempts, base_delay=s.fs_retry_base_delay)
+
+
 def _now() -> str:
     # Workflow scripts forbid Date.now(); here in normal Python we just use the clock.
     from datetime import datetime
@@ -604,6 +612,7 @@ def main(argv: list[str] | None = None) -> int:
     pp.set_defaults(func=cmd_plan)
 
     args = p.parse_args(argv)
+    _configure_fs_retry()
     return args.func(args)
 
 

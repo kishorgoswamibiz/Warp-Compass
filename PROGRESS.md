@@ -10,17 +10,32 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL PHASES DONE (P0–P13).** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL PHASES DONE (P0–P14).** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
-  identity + participant lifecycle**. The graph is a folder of readable Markdown files at
-  `{BUS_ROOT}/graph` (Drive-synced); people declare name + role once and are never asked again;
-  folders and provenance name people, not UUIDs; and a person can be retired without the graph
-  being touched. **Nothing is blocked.**
+  identity + participant lifecycle** → **P14 Drive-backed-bus hardening**. The graph is a folder of
+  readable Markdown files, now on **local disk** (`GRAPH_ROOT=brain/_graph`) rather than inside the
+  Drive folder; people declare name + role once and are never asked again; folders and provenance
+  name people, not UUIDs; and a person can be retired without the graph being touched.
+  **Nothing is blocked.**
+- **✅ Operator prerequisite (P14) — DONE 2026-08-03.** The Drive bus folder is **Available offline**
+  (screenshot: `docs/images/drive-folder-available-offline.png`). The owner ran a green round and
+  deleted the `G:\My Drive\warp-compass\graph` fallback copy; `brain/_graph` is now the only graph.
+  `cli list-participants`, which hung >6 min on 2026-07-28, now returns instantly — the stream-only
+  symptom is gone. See `brain/README.md` → "When the bus is on Google Drive".
+- **⚠ ONE REAL GAP OPEN:** the **live Apps Script Web App is still the P11 version** — P13's
+  `Code.gs` changes were committed but never deployed, so Drive `profile.json` files get no
+  `role_title` and no per-folder `README.md`. Owner action, see Blockers.
 - **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build + deployed + sync live. Optional-only work remains
   (transcript Docs, semantic conflict tier, STT field-WER eval).
-- **Last updated:** 2026-07-28 · by `agent:opus-p13`
+- **Last updated:** 2026-08-03 · by `agent:opus-p15`
+- **Verified (2026-08-03):** brain `ruff` clean + `pytest` **124 passed**; PWA `typecheck` +
+  `typecheck:functions` clean + **45 vitest** + `npm run build` installable; `cli list-participants`
+  live against the Drive bus returns both participants **with roles** in under a second.
+- **Verified (P14):** brain `ruff` clean + `pytest` **113 passed** (13 new `test_fsretry.py`, which
+  injects `WinError 1450` rather than needing a real Drive mount); `cli completeness` re-run against
+  the migrated local bundle returns the same 8 roles / 12 activities, so the move lost nothing.
 - **Verified (P13):** brain `ruff` clean + `pytest` **100 passed** (the WHOLE suite — no DB/marker
   split anymore); PWA `npm run typecheck` clean + **45 vitest** + `npm run build` green; worker
   `typecheck` clean; the three new CLI commands smoke-tested against a scratch bus (dry-run,
@@ -28,24 +43,27 @@
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **Nothing blocked — the system is live.** Operate it: `cli run-round` per round
-  (Answer Logs arrive automatically via Drive sync), `cli docgen` for the deliverable. New in P13:
-  `cli list-participants`, `cli retire-participant --id X`, `cli reset-engagement --yes`.
+- **Next up:** **One owner action: redeploy the Apps Script Web App** (see Blockers — it's still the
+  P11 version). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
+  Drive sync), `cli docgen` for the deliverable. New in P13: `cli list-participants`,
+  `cli retire-participant --id X`, `cli reset-engagement --yes`.
   **Before handing the app to a wider team**, run the clean-slate procedure in
-  `OPERATOR-MANUAL.md` §1d — and note `deliverable.md` is committed with old test data
-  (`persona.demo`, `p_alice`) that should be regenerated or blanked first.
+  `OPERATOR-MANUAL.md` §1d. (`deliverable.md` was regenerated from the real graph on 2026-08-03 —
+  the old `persona.demo`/`p_alice` test data is gone.)
+- **Prompt tuning:** every prompt in the system is indexed with clickable line links in
+  **`PROMPTS.md`** (repo root) — start there rather than grepping.
 
 ## ▶ Resume here (start every session with this)
 
 1. In a terminal, **`cd "C:\Users\Lenovo\Desktop\Warp Compass\brain"`** — uv/Python commands ONLY
    work from this folder (running elsewhere gives `No module named 'warp_compass_brain'`).
-2. Sanity check: `uv run pytest -q` → expect **100 passed** (no database needed — P12).
+2. Sanity check: `uv run pytest -q` → expect **113 passed** (no database needed — P12).
 3. **All build phases (P0–P13) are DONE.** Operating routine is `OPERATOR-MANUAL.md`. To regenerate
    the deliverable: `uv run python -m warp_compass_brain.cli docgen [--include-unverified]
    [--out FILE]`. Keys are in `brain/.env`.
 - **Build environment:** Python 3.12 + uv (`brain/`), Node 20 + npm (`pwa/`, `worker/`).
-  **No database server** — the graph is an OKF Markdown bundle at `{BUS_ROOT}/graph`
-  (`docs/plan/phase-12-okf-store.md`). Verify steps in each package README and in
+  **No database server** — the graph is an OKF Markdown bundle at `GRAPH_ROOT` (P14: local disk,
+  `brain/_graph`; see `docs/plan/phase-12-okf-store.md`). Verify steps in each package README and in
   `docs/10-implementation-plan.md`.
 
 ---
@@ -73,7 +91,9 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 
 | P13 | 13 | Declared identity (name+role once) + participant lifecycle (retire / reset) | DONE | agent:opus-p13 | `pwa/src/sync/participant.ts` · `pwa/src/screens/OnboardingCard.tsx` · `pwa/src/runner/{prompts,session,runner,answerlog}.ts` · `apps-script/Code.gs` (README.md + `role_title`) · `brain/.../lifecycle.py` · `bus/{base,folder}.py` retirement · `cycle.py` Finding 1 · `planner.py` orphan pool · `docgen/render.py` names · 3 new CLI commands · 99 brain + 45 pwa tests · ADRs #29/#30 · `docs/plan/phase-13-identity-and-lifecycle.md` | 2026-07-28 |
 
-**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation).
+| P14 | 14 | Survive a Google-Drive-backed bus: graph moved to local disk + FS retry | DONE | agent:opus-p14 | `brain/.../fsretry.py` (new) · `bus/folder.py` + `graphstore/okf_store.py` all I/O retried · `config.py` `fs_retry_*` · `GRAPH_ROOT` now local (`brain/_graph`) · 13 new tests (113 total) · `brain/README.md` "When the bus is on Google Drive" · `DEPLOY.md` | 2026-07-28 |
+
+**Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
 ---
 
@@ -96,10 +116,23 @@ _Nobody is actively working right now._ When you start, add a line:
   matmul shape error. **Pick ONE embedder mode and stick with it** (run ingest *consistently* with
   or without `--extra vectors`); if it's already mixed, delete `brain/_state/vectors.sqlite` and
   re-ingest (the Neo4j graph and the raw Answer Logs are untouched — vectors are re-derivable).
-- ⚠️ **Batch extractor (`v4-pro`) occasionally returns an empty/non-JSON completion** and the brain
-  does **not** retry that specific case (the SDK retries HTTP errors, not an empty 200 body). It's
-  transient — re-running usually succeeds. A small retry-on-empty in `DeepSeekProvider` would harden
-  batch ingest (out of P5 scope; noted for a brain hardening pass).
+- ⚠️ **OPEN (owner, 5 min) — the live Apps Script Web App is the P11 version, not P13.** Evidence:
+  both live `profile.json` files carry `display_name` but **no `role_title`**, and neither
+  participant folder has the `README.md` that P13's `Code.gs` renders. So P13's Drive-readability
+  work has never actually run. Consequences: `list-participants`/`docgen` showed `?` instead of the
+  role, and the human-readable per-folder README is missing. **Fix:** Apps Script editor → *Manage
+  deployments* → edit the existing deployment → **New version** (keeps the same `/exec` URL, so no
+  Cloudflare secret change). The two existing profiles were **backfilled by hand on 2026-08-03**
+  (roles recovered verbatim from each Answer Log's identity-seed entry), so `list-participants` is
+  correct today — but the **next** push from a phone will write a profile with no `role_title` again
+  until the redeploy happens.
+- ✅ **RESOLVED (2026-08-03) — batch extractor empty/non-JSON completion.** `DeepSeekProvider.
+  complete_json` now re-asks on an unparseable 200 body (`LLM_JSON_ATTEMPTS`, default 3, exponential
+  backoff via `LLM_JSON_BASE_DELAY`), warns to stderr per retry, and re-raises the *last* parse
+  error so the failure mode is unchanged when it genuinely can't parse. HTTP errors still raise
+  immediately (the SDK already retried those). 7 tests in `test_deepseek_json_retry.py` cover
+  empty-then-success, prose-then-success, give-up, `attempts=1`, the one-call happy path, fenced
+  JSON, and a JSON *array* being a hard error worth retrying.
 - **Embeddings (optional, recommended).** Best semantic dedup needs `uv sync --extra vectors`
   (fastembed). Without it the pipeline uses a deterministic hashing fallback (lexical only) —
   works, weaker recall. Run ingest with `uv run --extra vectors ...` to use embeddings.
@@ -144,6 +177,104 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 2026-08-03 · agent:opus-p15 — P14 operator step confirmed; profile `role_title` defect found; prompts indexed
+- **Owner confirmed P14's must-dos are done:** bus folder set **Available offline**, a full round ran
+  green, and the `G:\My Drive\warp-compass\graph` fallback copy was deleted. Independently verified:
+  `brain/_graph` is the live bundle (52 files / 94,607 B — grown from P14's 32 / 44,784, so it is
+  being written), the Drive path is gone, `GRAPH_ROOT` is the absolute local path and `BUS_ROOT` is
+  `G:\My Drive\warp-compass`. **`cli list-participants` returned in under a second** — the same
+  command that hung >6 min on 2026-07-28. P14's hang is closed.
+- **Found the profile.json defect the owner half-remembered — it was real.** Both live profiles had
+  `display_name` but **no `role_title`**, and neither participant folder had P13's `README.md`. Root
+  cause is **not** brain code: `git show 36cd115^:apps-script/Code.gs` proves the pre-P13 script
+  merged only `display_name`, so **the Apps Script Web App was never redeployed after P13**. The
+  brain side is innocent and correct — `lifecycle.py` reads `role_title` properly, and
+  `cycle.py`'s read-merge-write preserves it. **Did:** backfilled both profiles, taking each role
+  **verbatim from the Answer Log's identity-seed entry** (`"I'm Ajay Delivery, I'm the Delivery
+  Specialist / Project Manager."`) rather than un-slugging the participant id, which is lossy
+  (`…-business-analysis-specia-f25b` is truncated). `list-participants` now prints both roles.
+  The redeploy is still required or the next phone push regresses it — logged in Blockers.
+- **Also confirmed the P14 `read_profile` data-loss guard is correctly in place** (`folder.py`
+  `_read_json_any` → `read_text_or_none`: absent/malformed still reads `{}`, a busy drive raises).
+  Both profiles have intact `ingested_logs` matching their answer-log count, so no round ever
+  re-ingested through the empty-profile path. No money was burned.
+- **Added `PROMPTS.md`** (repo root) — an index of every prompt with `file#Lnn` links, ordered by how
+  much each changes the felt conversation, plus a "the conversation starts badly → edit §2 vs §5 vs
+  §3" decision tree. Written because prompt copy lives in 7 places across 2 languages and the owner
+  wants to iterate on interview quality without reading source.
+- **Housekeeping:** regenerated `deliverable.md` from the real graph (the committed copy still had
+  `persona.demo`/`p_alice` test data — now 0 matches) and deleted the stray `brain/deliverable.md`
+  duplicate; moved `referrence images/Folder available offline.png` →
+  `docs/images/drive-folder-available-offline.png` and embedded it in `brain/README.md`'s Drive
+  section; committed `brain/_graph/` per P14 gotcha 4 (it was drifting untracked, and now that the
+  Drive copy is deleted git is its only version history).
+- **Verified:** brain `ruff` clean + **124 pytest**; PWA `typecheck` + `typecheck:functions` clean +
+  **45 vitest** + `npm run build` installable.
+- **Next:** owner redeploys the Apps Script (Manage deployments → edit → New version — same `/exec`
+  URL, no Cloudflare secret change). Then prompt tuning via `PROMPTS.md`.
+- **Gotchas:** (1) **The repo is not the deployment for `apps-script/`.** It's the one component
+  Cloudflare's git integration does NOT auto-deploy — a `Code.gs` commit does nothing until someone
+  redeploys it by hand, which is exactly how P13's changes sat dormant for 6 days. Treat any future
+  `Code.gs` edit as an owner action, not a push. (2) **The identity-seed entry is the recovery source
+  for a lost `role_title`** — `identityAnswer()` writes the role verbatim into the Answer Log's first
+  entry, so it survives even when the profile doesn't. Don't reconstruct roles from participant ids;
+  the slug is truncated to a fixed width. (3) `brain/_graph/` is now tracked — expect graph churn in
+  every future diff after a round. That's intended (version history per
+  `OKF-vs-Neo4j-report.md` §3), but don't `git add -A` mid-round or you'll commit a half-written
+  bundle.
+
+### 2026-07-28 · agent:opus-p14 — Drive-backed bus hardening; P14 → DONE
+- **Symptom reported:** `cli run-round` ran a long time, then died at `cycle.py:148` →
+  `bus.ensure_participant` → `mkdir(parents=True, exist_ok=True)` with
+  `OSError [WinError 1450] Insufficient system resources` on a participant folder that *already
+  existed*. Both the `mkdir` and `exist_ok`'s fallback `is_dir()` raised.
+- **Diagnosed:** not a code bug. `G:` is Google Drive for Desktop mounted through **Dokan**, a
+  user-mode FS driver; when its request pool is exhausted, *every* operation on the drive fails
+  with 1450 — reads and `stat` too, which is why an `exist_ok=True` mkdir could die. Evidence:
+  Drive's own `drive_fs.txt` logged `Slow operation AsyncDokanGetDeleteApproval` and
+  `AsyncDokanFindFiles` on that exact participant path; nonpaged pool 1.1 GB; 0.7 GB of 13.9 GB RAM
+  free; the folder is **stream-only** (`G:` used = 0.00 GB, no content cache) despite
+  `DEPLOY.md` requiring offline-available. Amplifier: the OKF store rewrites a whole node file per
+  touch, rewrites BOTH endpoints per `add_edge`, and 11 `index.md` on close — every one an
+  `os.replace`, which costs Drive a *delete-approval round-trip*. Hundreds per round.
+- **Did (owner-approved options A + C; owner is doing B themselves):**
+  - **A — graph off Drive.** Copied the 32-file bundle `G:\My Drive\warp-compass\graph` →
+    `brain/_graph` (verified: same tree, 44,784 bytes) and set `GRAPH_ROOT` in `brain/.env`. The
+    bundle is brain-private (the PWA never reads it), so ~95% of Drive writes are simply gone. The
+    Drive copy was left in place as a fallback — **delete it once a round has been observed green.**
+  - **C — `fsretry.py`.** `retry_fs` / `read_text_or_none` / `atomic_write_text`, retrying a
+    documented set of transient winerrors (1450, 5, 6, 32, 33, 1453, 1816) with exponential backoff
+    (6 attempts / ~15s, `FS_RETRY_ATTEMPTS` + `FS_RETRY_BASE_DELAY`), then re-raising the original
+    error untouched. Every I/O call in `bus/folder.py` and `graphstore/okf_store.py` now goes
+    through it, and the two duplicate `_atomic_write` implementations collapsed into one.
+  - Fixed a **latent data-loss bug** found on the way (see gotcha 1).
+  - Docs: `brain/README.md` gained "When the bus is on Google Drive"; `DEPLOY.md` step 1 now says
+    to keep `GRAPH_ROOT` local; `.env.example` explains why.
+- **Next:** owner makes the Drive folder **Available offline** (option B), then run
+  `uv run --extra vectors python -m warp_compass_brain.cli run-round`. If it's green, delete
+  `G:\My Drive\warp-compass\graph`. Optional follow-up (option D, not done): batch graph writes —
+  mark nodes dirty and flush once at `close()` instead of writing on every `upsert_node`/`add_edge`.
+  That's an order-of-magnitude cut and speeds up local runs too, but it needs the commit points in
+  `cycle.py:173-175` reordered first, or a crash mid-round marks logs `ingested` with no graph
+  writes behind them.
+- **Gotchas:** (1) **Tolerant reads must not tolerate a busy drive.** `read_profile` and
+  `_parse_node_file` both caught `OSError` and returned empty/`None`, which is right for a
+  half-synced file and catastrophic for 1450: an empty `profile.json` makes `cycle` treat an
+  existing participant as brand new, re-ingesting every Answer Log through DeepSeek (real money) and
+  overwriting the real profile; a dropped node file gets re-created empty by the next
+  `upsert_node`, losing its provenance. `read_text_or_none` now separates "genuinely absent" from
+  "drive busy" — absence still returns empty, a persistent transient error raises. `OSError` was
+  removed from `_parse_node_file`'s except tuple deliberately. (2) **Retrying only helps when Drive
+  *raises*.** If it *blocks* instead, the round hangs regardless — `cli list-participants` hung
+  >6 min on `G:` during this session. Only option B fixes that, which is why it isn't optional.
+  (3) The graph is now at a path relative to `brain/` in `.env.example` (`./_graph`) — running uv
+  from anywhere else silently starts a *second, empty* graph. `brain/.env` uses an absolute path to
+  avoid this; keep it that way. (4) `_graph/` is deliberately NOT gitignored (`_state/` and `_bus/`
+  are), so git can give the bundle the version history `OKF-vs-Neo4j-report.md` §3 recommends —
+  it's currently untracked, so either commit it or add it to `.gitignore`; don't leave it drifting.
+  (5) `test_fsretry.py` injects fake `OSError`s with `.winerror` set and `base_delay=0`, so the
+  suite needs no Drive mount and doesn't actually sleep.
 
 ### 2026-07-28 · agent:opus-p13 — Phase 13 (declared identity + participant lifecycle); P13 → DONE
 - **Did:** (1) **Identity is declared once per device.** A typed onboarding card

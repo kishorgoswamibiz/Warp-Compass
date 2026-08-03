@@ -45,10 +45,10 @@ def test_paraphrased_answers_merge_to_one_node(tmp_path):
     llm = FakeLLM([ext1, ext2], adjudicate_verdict="same")
     ing = _ingestor(graph, llm, tmp_path)
 
-    s1 = ing.ingest_answer("...", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
+    s1 = ing.ingest_answer("The lead checks stock every morning.", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
     assert len(s1.created) == 1 and len(graph.nodes) == 1
 
-    s2 = ing.ingest_answer("...", persona_id="persona.B", session_id="s2", ts="2026-03-13T10:00:00Z")
+    s2 = ing.ingest_answer("The lead checks stock every morning.", persona_id="persona.B", session_id="s2", ts="2026-03-13T10:00:00Z")
     assert len(s2.merged) == 1
     assert len(graph.nodes) == 1, "paraphrase should merge, not create a duplicate"
 
@@ -66,7 +66,7 @@ def test_relations_committed_between_created_nodes(tmp_path):
     ], "relations": [{"type": "PERFORMS", "from_ref": "n1", "to_ref": "n2"}]}
     graph = FakeGraphStore()
     ing = _ingestor(graph, FakeLLM([ext]), tmp_path)
-    s = ing.ingest_answer("...", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
+    s = ing.ingest_answer("The lead checks stock every morning.", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
     assert len(s.created) == 2 and s.edges == 1
     role_id = next(c for c in s.created if c.startswith("role."))
     neigh = graph.neighbors(role_id, EdgeType.PERFORMS)
@@ -78,7 +78,7 @@ def test_incomplete_node_is_quarantined(tmp_path):
                       "description": ""}], "relations": []}
     graph = FakeGraphStore()
     ing = _ingestor(graph, FakeLLM([ext]), tmp_path)
-    s = ing.ingest_answer("...", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
+    s = ing.ingest_answer("The lead checks stock every morning.", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
     assert s.quarantined == 1 and len(graph.nodes) == 0
     assert len(JsonlQueue(str(tmp_path / "q.jsonl")).all()) == 1
 
@@ -91,7 +91,7 @@ def test_unregistered_category_recorded_in_pending(tmp_path):
     # NOTE: extractor sanitize already strips unregistered codes, so to exercise the gate's
     # pending path we feed the gate directly is covered in test_create_gate; here we just confirm
     # the pipeline still creates the node with a default category.
-    s = ing.ingest_answer("...", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
+    s = ing.ingest_answer("The lead checks stock every morning.", persona_id="persona.A", session_id="s1", ts="2026-03-12T10:00:00Z")
     assert len(s.created) == 1
     node = next(iter(graph.nodes.values()))
     assert node.category_codes == ["02"]  # default for Activity (77.7 stripped upstream)

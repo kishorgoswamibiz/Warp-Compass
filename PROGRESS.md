@@ -42,9 +42,11 @@
   scoring + broken-chain tests in `test_completeness.py`, 6 new prompt/opener tests in
   `test_planner.py` incl. a **cross-language parity check that parses `prompts.ts`**, 7 new
   `test_coverage.py`); PWA `typecheck` + `typecheck:functions` clean + **68 vitest** (7 new: probe
-  budget + the no-"day" guards) + `npm run build` installable. `cli coverage` smoke-tested live
-  against the real graph. Verified end-to-end that `Stage`, `Objective`, all 5 new edges and taxonomy
-  codes `00`/`11` actually reach the extractor prompt.
+  budget + the no-"day" guards) + `npm run build` installable. Verified end-to-end that `Stage`,
+  `Objective`, all 5 new edges and taxonomy codes `00`/`11` actually reach the extractor prompt.
+  `cli coverage` run live — note the first live run only exercised the **empty-graph** path and
+  therefore proved less than it looked (see the `cp1252` gotcha below); the populated render is now
+  verified through a real `print()` on a `cp1252` stdout, plus a test.
 - **Verified (04 Aug 2026, P15a):** brain `ruff` clean + `pytest` **152 passed** (25 in the new
   `test_roles.py`, 3 new dual-hat tests in `test_crosspersona.py`); PWA `typecheck` +
   `typecheck:functions` clean + **61 vitest** (7 new `roles.test.ts`). **`cli seed-roles` run live
@@ -309,6 +311,13 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 - **Verified:** brain `ruff` clean + `pytest` **174 passed** (was 152); PWA `typecheck` +
   `typecheck:functions` clean + **68 vitest** (was 61) + `npm run build` installable; `cli coverage`
   run live.
+- **Caught a crash in my own new command, on review rather than in the smoke test.**
+  `render_coverage` used a tick mark for "this role has been interviewed". Python on Windows gives
+  this process a **`cp1252`** stdout and `U+2713` is not in that codepage, so `print()` raised
+  `UnicodeEncodeError` and took `cli coverage` down. It passed the live smoke test only because the
+  **empty-graph message happens to be ASCII** — the failure needed a stage with an interviewed role,
+  i.e. real data. Render is now pure ASCII (`[x]` / `[ ]`, which reads better as a matrix anyway) and
+  a test does `text.encode("cp1252")` — the actual operation that was failing, not a proxy for it.
 - **Next: P15c**, now unblocked — it needed P15b's stages and `REPORTS_TO` scoring. Several of the
   §7.2 structural findings are already half-built inside `coverage.py` (unowned stage, silent stage),
   so start by reading it rather than writing them again.
@@ -322,6 +331,9 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
   `COLD_START_OPENERS` copies are compared **verbatim** by a brain test that parses `prompts.ts` — if
   you reformat that array (change quoting, wrap a line differently), fix the regex in
   `test_cold_start_openers_match_the_pwa_copy_verbatim` rather than loosening the assertion.
+  (6) **Anything this codebase `print()`s must be ASCII.** stdout here is `cp1252`, not UTF-8. The
+  graph *files* are UTF-8 and full of em dashes, which is fine — but a non-cp1252 character in
+  terminal output is a crash, not a mojibake, and it will only show up on real data.
 
 ### 04 Aug 2026 · agent:opus-p15a — P15a LANDED (role registry, multi-select identity, seed-roles run live). P15b/P15c still untouched.
 

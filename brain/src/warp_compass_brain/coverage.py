@@ -157,24 +157,31 @@ def build_coverage(graph: GraphStore) -> CoverageReport:
 
 
 def render_coverage(report: CoverageReport) -> str:
-    """A terminal-readable matrix. The operator's "who to invite next" answer."""
+    """A terminal-readable matrix. The operator's "who to invite next" answer.
+
+    **Pure ASCII, deliberately.** Python on Windows gives this process a ``cp1252`` stdout, and a
+    tick mark (``U+2713``) is not in that codepage — printing one raises ``UnicodeEncodeError`` and
+    takes the whole command down. The empty-graph path happens to be ASCII, so this only failed once
+    a stage had an interviewed role, i.e. on real data rather than in a smoke test. Guarded by
+    ``test_render_is_pure_ascii_so_it_cannot_crash_a_windows_console``.
+    """
     lines: list[str] = []
     if not report.stages:
-        lines.append("No lifecycle stages in the graph yet — nothing to map coverage against.")
+        lines.append("No lifecycle stages in the graph yet - nothing to map coverage against.")
         lines.append("(Stages are discovered from interviews; they are never predefined.)")
     for stage in report.stages:
         flags = []
         if stage.is_silent:
-            flags.append("SILENT — nobody here has been interviewed")
+            flags.append("SILENT - nobody here has been interviewed")
         if stage.is_unowned:
-            flags.append("UNOWNED — no role is accountable")
+            flags.append("UNOWNED - no role is accountable")
         suffix = f"   [{'; '.join(flags)}]" if flags else ""
         lines.append("")
         lines.append(f"## {stage.stage_name}  ({stage.activity_count} activities){suffix}")
         if not stage.roles:
             lines.append("    (no roles named in this stage yet)")
         for r in stage.roles:
-            mark = "✓" if r.has_interviewed_owner else "·"
+            mark = "[x]" if r.has_interviewed_owner else "[ ]"
             who = ", ".join(r.interviewed_by) if r.interviewed_by else "NOT INTERVIEWED"
             lines.append(f"    {mark} {r.role_name:<38} {'+'.join(r.via):<22} {who}")
 
@@ -182,12 +189,12 @@ def render_coverage(report: CoverageReport) -> str:
         lines.append("")
         lines.append("## Roles named but never interviewed (the invite list)")
         for r in report.roles_without_an_owner:
-            lines.append(f"    · {r.role_name}  ({r.role_id})")
+            lines.append(f"    [ ] {r.role_name}  ({r.role_id})")
 
     if report.activities_outside_any_stage:
         lines.append("")
         lines.append(
             f"## {report.activities_outside_any_stage} activities are not in any stage yet "
-            "— the lifecycle spine hasn't absorbed them."
+            "- the lifecycle spine hasn't absorbed them."
         )
     return "\n".join(lines).lstrip("\n")

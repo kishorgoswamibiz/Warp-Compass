@@ -151,6 +151,25 @@ def test_render_is_readable_and_flags_the_silent_stage():
     assert "SILENT" not in presales_line
 
 
+def test_render_is_pure_ascii_so_it_cannot_crash_a_windows_console():
+    """A tick mark would kill the command on real data, not in a smoke test.
+
+    Python on Windows hands this process a `cp1252` stdout. `U+2713` is not in that codepage, so
+    `print(render_coverage(...))` raised `UnicodeEncodeError` and took `cli coverage` down — but only
+    once a stage had an interviewed role, since the empty-graph message is incidentally ASCII.
+    """
+    g = FakeGraphStore()
+    _two_stage_engagement(g)
+    g.upsert_node(_node("act.loose", NodeType.ACTIVITY, "Something unplaced"))
+    text = render_coverage(build_coverage(g))
+
+    text.encode("cp1252")  # the real assertion: this is what `print` does on the owner's laptop
+    assert text.isascii(), [ch for ch in set(text) if not ch.isascii()]
+
+    # Both matrix marks must survive being ASCII.
+    assert "[x]" in text and "[ ]" in text
+
+
 def test_an_empty_graph_says_so_instead_of_printing_nothing():
     report = build_coverage(FakeGraphStore())
     text = render_coverage(report)

@@ -10,7 +10,7 @@
 
 ## Status snapshot
 
-- **Phase:** **P0–P14 DONE · P15a + P15b DONE · P15c TODO.** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL PHASES DONE (P0–P15).** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
@@ -36,8 +36,18 @@
 - **⚠ ONE REAL GAP OPEN:** the **live Apps Script Web App is still the P11 version** — P13's
   `Code.gs` changes were committed but never deployed, so Drive `profile.json` files get no
   `role_title` and no per-folder `README.md`. Owner action, see Blockers.
-- **Overall:** P0–P14 complete + deployed + sync live; **P15 is ~2/3 in** (P15a + P15b of a→b→c).
-- **Last updated:** 04 Aug 2026 · by `agent:opus-p15b`
+- **Overall:** ▰▰▰▰▰▰▰▰▰▰ P0–P15 complete + deployed + sync live. The deliverable is now an SOP
+  **plus** a gap-and-recommendation report — the EY/PwC-style output the engagement is meant to
+  replace. Optional-only work remains (transcript Docs, STT field-WER eval).
+- **Last updated:** 04 Aug 2026 · by `agent:opus-p15c`
+- **Verified (04 Aug 2026, P15c):** brain `ruff` clean + `pytest` **204 passed** (20 new
+  `test_alignment.py` covering altitude/cycles/misalignment-vs-conflict and one fixture per §7.2 row,
+  10 new docgen tests); PWA unchanged and still green (`typecheck` + **68 vitest**). **Smoke-tested
+  end to end against the REAL `OkfGraphStore`** (not the fake): `Stage`/`Objective` round-trip to
+  `_graph/stages/` + `_graph/objectives/`, the new `Provenance.account` survives a write/read cycle,
+  and `docgen` rendered the stage-spine Mermaid subgraphs plus a Gaps & Recommendations section with
+  1 misalignment (both accounts quoted, altitudes shown), 4 structural findings and 24 open
+  questions.
 - **Verified (04 Aug 2026, P15b):** brain `ruff` clean + `pytest` **174 passed** (9 new Stage/Role
   scoring + broken-chain tests in `test_completeness.py`, 6 new prompt/opener tests in
   `test_planner.py` incl. a **cross-language parity check that parses `prompts.ts`**, 7 new
@@ -67,12 +77,9 @@
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **P15c** — the alignment diagnostic: derived altitude from `REPORTS_TO` depth,
-  `GapKind.MISALIGNMENT` (cross-altitude divergence preserved as a finding instead of reconciled
-  away), the structural findings in plan §7.2, and the stage-spine process map + "Gaps &
-  Recommendations" section in `docgen`. Brief: `docs/plan/phase-15-lifecycle-and-alignment.md` §7.
-  **This is the half that makes the deliverable consulting-grade rather than just an SOP.**
-  **One owner action first: redeploy
+- **Next up:** **No build phase is open.** Operate it: `cli run-round` per round, `cli coverage` for
+  "who to invite next", `cli docgen` for the deliverable (now including Gaps & Recommendations).
+  **One owner action still outstanding: redeploy
   the Apps Script Web App** (see Blockers — it's still the P11 version, so `role_titles` cannot reach
   Drive). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
   Drive sync), `cli docgen` for the deliverable. New in P13: `cli list-participants`,
@@ -125,7 +132,7 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 
 | P15a | 15 | Role registry (10 roles + aliases) + multi-select onboarding + `seed-roles` | DONE | agent:opus-p15a | `contracts/roles.json` (new) · `brain/.../roles.py` + `cli seed-roles` (new) · `pwa/src/sync/roles.ts` + parity test (new) · `OnboardingCard.tsx` role chips · `participant.ts` `role_titles[]` + derived `role_title` mirror · `extractor.py` `KNOWN ROLES` block · `ingest.py` + `crosspersona.py` exclude `said_by:registry` from corroboration (R3) · `crosspersona.py`/`planner.py` dual-hat self-handoff copy (`KIND_HANDOFF_SELF`) · `Code.gs` + `_sync.ts` + `remote.ts` `role_titles` to Drive · **152 brain + 61 pwa tests** · ADR #33 · `seed-roles` **run live** (10 nodes) | 04 Aug 2026 |
 | P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | DONE | agent:opus-p15b | `contracts/ontology.json` (+`Stage`,`Objective`, 5 edges, `cadence`, codes `00`/`11`) · `models.py` enums · `okf_store.py` `TYPE_DIRS` (`stages/`, `objectives/`) · `completeness.py` per-type scoring + `"either"` direction + `stage_chain_connectivity` + stage-aware chain verdict + registry-only nodes unscored · `prompts.ts` `COLD_START_OPENERS` + `SYSTEM_PROMPT` (two-pass, lifecycle, no "day") · `planner.py` mirror + 9 new field openers · `session.ts`/`runner.ts` probe budget (3 stage / 1 else) · `extractor.py` stage+cadence+objective rules · `coverage.py` + `cli coverage` (new) · **174 brain + 68 pwa tests** | 04 Aug 2026 |
-| P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §7. **Unblocked now** — P15b landed the stages and the `REPORTS_TO` scoring altitude depends on. Still to build: `alignment.py` (altitude from `REPORTS_TO` depth; cycles reported not crashed); `GapKind.MISALIGNMENT` + the altitude branch in `crosspersona.py` (same altitude → reconcile as today, different altitudes → **preserve both accounts as a finding, route no reconciliation thread**); the §7.2 structural findings (unowned stage, expectation with no execution, approval with no criteria, unmeasured stage, single point of failure, duplicated work, silent stage — several are already computable from `coverage.py`); `ingest.py` must snapshot each contributor's `description` onto `Provenance` (the retention ADR #23 deferred — the precondition for holding two accounts at once); `docgen/` needs the stage-spine diagram and the Gaps & Recommendations section. ADRs #31/#32 are written and marked pending. | 04 Aug 2026 |
+| P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | DONE | agent:opus-p15c | `brain/.../alignment.py` (new — `derive_altitudes`, `AlignmentEngine`, 9 `FindingKind`s) · `GapKind.MISALIGNMENT` + altitude branch in `completeness._conflict_gaps` · `crosspersona` routes **no** reconciliation thread for a cross-altitude divergence (`CrossPersonaReport.misalignments`) · `Provenance.account` snapshot in `ingest.py` + `models.py` + `node-card.schema.json` + `okf_store` serializer (optional, back-compatible — retires ADR #23's deferral) · `docgen/traverse.py` `StageGroup` + stage-ordered narrative + `KnowledgeGap` · `docgen/render.py` Mermaid **subgraphs** per stage + "Gaps & Recommendations" · **204 brain tests** · ADRs #31/#32 marked done | 04 Aug 2026 |
 
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
@@ -232,6 +239,79 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 04 Aug 2026 · agent:opus-p15c — P15c LANDED. **PHASE 15 COMPLETE**: divergence is now a finding, not a defect
+
+- **What this sub-phase is for.** P15a was identity, P15b was the interview. P15c is the part that
+  makes the output an EY/PwC-style *report* rather than an SOP: the deliverable now carries a **Gaps &
+  Recommendations** section, and the process map is drawn on the lifecycle spine.
+- **The behaviour that changed, and it is the whole point (ADR #32).** The system was engineered to
+  erase the signal the engagement sells. Ingest flagged `CONFLICTING`, completeness filed an
+  `UNRESOLVED_CONFLICT`, and the planner asked *every* contributor "how does it actually work?" until
+  one version survived. Now the verdict branches on **derived altitude**: peers still get a
+  reconciliation thread, but a divergence **across levels** becomes `GapKind.MISALIGNMENT`, routes to
+  **nobody**, and is reported with both accounts and who holds each. The delta between what an exec
+  believes and what actually happens is the product.
+- **Altitude is derived, never declared (ADR #31).** `alignment.derive_altitudes` walks `REPORTS_TO`
+  upward: depth 0 is the role with no outgoing `REPORTS_TO`, equal depth means peers, a **cycle is
+  reported as a finding rather than crashing** (depth stays unknown — there is no root to count
+  from), and there is a depth cap so a pathological chain cannot spin. This only became possible
+  because P15b started scoring `Role.reports_to`.
+- **Retention: ADR #23's deferral is now retired.** Merge keeps one canonical card, so the surviving
+  `description` is whoever got there first and there was nothing to compare two accounts *from*. Added
+  **`Provenance.account`** — each contributor's own words, snapshotted at ingest. It is optional and
+  back-compatible (`node-card.schema.json` gains it with a default, and the serializer only writes the
+  key when non-empty), so an existing bundle still validates and does not grow noise.
+- **Two judgement calls the plan did not specify:**
+  (1) **Unknown altitude falls back to *reconciling*, not to claiming a finding.** With no org chart
+  we cannot assert a misalignment — and asking is exactly how the org chart gets filled in. Erring the
+  other way would manufacture findings out of missing data, which is the worst possible failure for a
+  consulting deliverable.
+  (2) **"Single point of failure" requires ≥2 activities in the stage.** A stage with one known
+  activity done by one role is the *normal* early state of every interview, so firing there put a SPOF
+  row against nearly every stage. It cut this smoke test from 6 structural findings to 4 without
+  losing a real one.
+- **Found and fixed a bug in my own new code, mid-write, that silently deleted findings.**
+  `_persona_role` answered "which role IS this person?" by first match over roles performing any
+  activity the persona had contributed provenance to. But an exec who merely *comments on* someone
+  else's activity picks up provenance on it — so the CEO was identified AS the Account Management
+  Specialist, both contributors collapsed onto one altitude, and the misalignment **vanished with no
+  error**. Attribution now scores roles: activities where the persona is the **sole** contributor
+  first (near-conclusive), then shared ones, then id for determinism. Regression test:
+  `test_an_exec_commenting_on_someone_elses_activity_is_not_mistaken_for_that_role`.
+- **Also caught on review: the diagram and the prose disagreed.** I had grouped the *diagram* into
+  Mermaid subgraphs per stage but left the **walkthrough** ordered by `activity_flow`, which can only
+  order what artifact/handoff links happen to connect — so with no shared artifact it fell back to id
+  order and printed "Write the BRD" (Discovery) *before* "Run the demo" (Pre-Sales). Half-done spine
+  rendering is arguably worse than none, because the picture looks authoritative. `_narrative_order`
+  now takes stage order first and flow order within a stage; unstaged work goes last. Two tests lock
+  it.
+- **The §7.2 structural findings**, one fixture each: unowned stage, expectation-with-nothing-behind-it
+  (an `Objective` on a stage its holder does not `OWN`, with nothing in the stage measured),
+  approval-with-no-criteria, unmeasured stage, single point of failure, duplicated work, silent stage,
+  reporting cycle. Several overlap with `coverage.py` by design — that module answers "who to invite",
+  this one answers "what to report".
+- **Verified:** brain `ruff` clean + **204 pytest** (was 174); PWA untouched and still green
+  (`typecheck` + 68 vitest). **Smoke-tested end to end against the REAL `OkfGraphStore`**, not the
+  fake: `Stage`/`Objective` round-trip to `_graph/stages/` and `_graph/objectives/`, `account` survives
+  a write/read cycle, and `docgen` produced the stage subgraphs plus 1 misalignment (both accounts
+  quoted with altitudes), 4 structural findings and 24 open questions. Script kept out of the repo; it
+  is reproducible from this entry.
+- **Next:** nothing blocked, no build phase open. Operate it. **Owner action still outstanding: the
+  Apps Script Web App is STILL the P11 build**, so `role_titles` cannot reach Drive.
+- **Gotchas:** (1) **`cli docgen` reads the Drive bus** for persona display names
+  (`persona_display_names(FolderBus(bus_root))`), so it inherits the P14 hang risk — it hung for me
+  against `G:` during this session. Pass `--bus` at a local scratch path to generate a deliverable
+  without touching Drive. This is pre-existing, not P15c. (2) **Role attribution decides whether a
+  divergence is a finding or a defect**, so `_persona_role` is load-bearing far beyond its size; a
+  genuinely multi-hat person still resolves to ONE role (risk R5) — that changes which hat a finding
+  is filed under, never whether it is raised. (3) `alignment` imports from `completeness` and
+  `completeness._conflict_gaps` imports `alignment` **inside the function** — deliberate, to avoid a
+  circular import at module load. Don't lift it to the top. (4) `FindingKind` is not `GapKind`: a gap
+  is something we have not been told, a finding is something we HAVE been told that is worth
+  reporting. A `MISALIGNMENT` is deliberately excluded from the knowledge-gap list so the same thing
+  isn't restated as a defect. (5) The report's severity order is a plain dict (`_SEVERITY`) —
+  misalignments first. If you add a `FindingKind`, add it there or it sorts last.
 
 ### 04 Aug 2026 · agent:opus-p15b — P15b LANDED: the interview is lifecycle-anchored, and Stage/Role are finally scored
 

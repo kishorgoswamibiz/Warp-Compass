@@ -5,7 +5,13 @@
   "description": "The compact, canonical card every graph node carries — what gets embedded and what the LLM reads when deciding 'same or new'. See docs/02-technical-approach.md §6.4.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "type", "canonical_name", "description", "category_codes"],
+  "required": [
+    "id",
+    "type",
+    "canonical_name",
+    "description",
+    "category_codes"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -15,20 +21,41 @@
     "type": {
       "type": "string",
       "description": "Fixed enum from the ontology node_types.",
-      "enum": ["Role", "Activity", "System", "Artifact", "Event", "ApprovalPoint", "Rule", "Problem", "Desire", "KPI"]
+      "enum": [
+        "Role",
+        "Activity",
+        "System",
+        "Artifact",
+        "Event",
+        "ApprovalPoint",
+        "Rule",
+        "Problem",
+        "Desire",
+        "KPI"
+      ]
     },
-    "canonical_name": { "type": "string", "minLength": 1 },
+    "canonical_name": {
+      "type": "string",
+      "minLength": 1
+    },
     "aliases": {
       "type": "array",
       "description": "The dedup superpower — different employees name the same thing differently; aliases collapse them onto one node.",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "default": []
     },
-    "description": { "type": "string", "minLength": 1 },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
     "category_codes": {
       "type": "array",
       "description": "Many-to-many governed tags from the taxonomy registry. Must already exist in contracts/ontology.json (a new code goes to the pending-taxonomy queue).",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "minItems": 1
     },
     "key_attributes": {
@@ -39,7 +66,9 @@
     "provenance": {
       "type": "array",
       "description": "Every fact traces to who said it and when; status only rises with evidence.",
-      "items": { "$ref": "#/definitions/provenance" },
+      "items": {
+        "$ref": "#/definitions/provenance"
+      },
       "default": []
     }
   },
@@ -47,13 +76,44 @@
     "provenance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["said_by", "session_id", "confidence", "status", "ts"],
+      "required": [
+        "said_by",
+        "session_id",
+        "confidence",
+        "status",
+        "ts"
+      ],
       "properties": {
-        "said_by": { "type": "string", "description": "persona_id of the source." },
-        "session_id": { "type": "string" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "status": { "type": "string", "enum": ["proposed", "unverified", "confirmed", "conflicting"] },
-        "ts": { "type": "string", "format": "date-time" }
+        "said_by": {
+          "type": "string",
+          "description": "persona_id of the source."
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "proposed",
+            "unverified",
+            "confirmed",
+            "conflicting"
+          ]
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "account": {
+          "type": "string",
+          "default": "",
+          "description": "THIS contributor's own description of the node, snapshotted at ingest (P15c). Merge keeps one canonical card, so without this each person's wording is overwritten and there is nothing to compare two accounts from (the reason ADR #23 deferred semantic conflict detection). Retaining it lets a cross-altitude divergence be reported as a finding with both sides quoted instead of reconciled down to one version. Optional: empty on pre-P15c entries, so old graph bundles still validate."
+        }
       }
     }
   }

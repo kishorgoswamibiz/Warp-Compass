@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..alignment import AlignmentEngine, Finding
 from ..completeness import (
     CompletenessEngine,
     GapKind,
@@ -86,6 +87,24 @@ class NarrativeStep:
 
 
 @dataclass
+class StageGroup:
+    """One lifecycle stage and the shown activities inside it (P15c §7.3).
+
+    Rendered as a Mermaid **subgraph**, which is what makes the process map legible to a client: the
+    diagram reads as the journey of one piece of work, with the work grouped under the phase it
+    belongs to, rather than a flat mesh of activities.
+    """
+
+    id: str
+    label: str
+    status: str
+    activity_ids: list[str] = field(default_factory=list)
+    owner_name: str = ""
+    #: Stages this one precedes, for ordering the subgraphs left to right.
+    precedes: list[str] = field(default_factory=list)
+
+
+@dataclass
 class EndToEnd:
     diagram_nodes: list[DiagramNode]
     diagram_edges: list[DiagramEdge]
@@ -93,6 +112,11 @@ class EndToEnd:
     gaps: list[DocGap]
     unbroken: bool
     hidden_count: int  # nodes withheld by the confidence filter
+    #: Lifecycle stages in `PRECEDES` order (P15c). Empty until interviews discover any, in which
+    #: case the renderer falls back to the flat P10 diagram — the spine is additive, not required.
+    stages: list[StageGroup] = field(default_factory=list)
+    #: Shown activities with no `PART_OF` stage. Rendered outside the subgraphs rather than dropped.
+    unstaged_activity_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -133,6 +157,17 @@ class CategorySection:
 
 
 @dataclass
+class KnowledgeGap:
+    """Something we still haven't been told — the third group in Gaps & Recommendations (§7.3)."""
+
+    detail: str
+    node_id: str | None = None
+    node_name: str | None = None
+    field: str | None = None
+    role_name: str | None = None
+
+
+@dataclass
 class GeneratedDocs:
     end_to_end: EndToEnd
     sops: list[RoleSOP]
@@ -140,6 +175,16 @@ class GeneratedDocs:
     orphan_desires: list[DocNode]
     categories: list[CategorySection]
     include_unverified: bool
+    # --- P15c: the gap-and-recommendation report (§7.3). Three ranked groups. ---
+    #: Cross-altitude divergence, each carrying every contributor's own account and altitude.
+    #: These lead the section: they are what a client argues with, and what justifies the work.
+    misalignments: list[Finding] = field(default_factory=list)
+    #: Structural findings computed from the shape of the graph — no disagreement required.
+    structural_findings: list[Finding] = field(default_factory=list)
+    #: What we still haven't been told. Deliberately last: a gap is our homework, not their problem.
+    knowledge_gaps: list[KnowledgeGap] = field(default_factory=list)
+    #: Derived reporting depth per role, so a finding can say "level 0" rather than a job title.
+    altitudes: dict[str, int | None] = field(default_factory=dict)
 
 
 # --- confidence helpers -----------------------------------------------------------------------
@@ -194,14 +239,45 @@ class DocGenerator:
     def generate(self) -> GeneratedDocs:
         snap = load_snapshot(self._g)
         report = CompletenessEngine(self._g, self._ont).assess()
+        e2e = self._end_to_end(snap, report)
+        alignment = AlignmentEngine(self._g).assess()
         return GeneratedDocs(
-            end_to_end=self._end_to_end(snap, report),
+            end_to_end=e2e,
             sops=self._sops(snap),
             problems=self._problems(snap),
             orphan_desires=self._orphan_desires(snap),
             categories=self._categories(snap),
             include_unverified=self._include,
+            misalignments=alignment.misalignments,
+            structural_findings=alignment.structural,
+            knowledge_gaps=self._knowledge_gaps(report, snap),
+            altitudes=dict(alignment.altitudes.depth),
         )
+
+    def _knowledge_gaps(self, report, snap) -> list[KnowledgeGap]:
+        """What we still haven't been told (§7.3, third group).
+
+        `MISALIGNMENT` is deliberately excluded — it is a *finding* reported above with both
+        accounts, not something missing. Including it here would restate the same thing as a defect
+        and undo ADR #32's whole point.
+        """
+        out: list[KnowledgeGap] = []
+        for g in report.gaps:
+            if g.kind is GapKind.MISALIGNMENT:
+                continue
+            card = snap.nodes.get(g.node_id) if g.node_id else None
+            if card is not None and not self._show(card):
+                continue  # a hidden node's gap must not leak its name into the confirmed view
+            out.append(
+                KnowledgeGap(
+                    detail=g.detail,
+                    node_id=g.node_id,
+                    node_name=g.node_name,
+                    field=g.field,
+                    role_name=g.role_name,
+                )
+            )
+        return out
 
     # --- node helpers ---
 
@@ -329,7 +405,8 @@ class DocGenerator:
                     )
                     dia_edges.append(DiagramEdge(g.node_id, gid, "handoff?", dashed=True))
 
-        narrative = self._narrative(snap, shown, flow)
+        stages, unstaged = self._stage_groups(snap, shown)
+        narrative = self._narrative(snap, shown, flow, stages)
         return EndToEnd(
             diagram_nodes=list(dia_nodes.values()),
             diagram_edges=dia_edges,
@@ -337,7 +414,49 @@ class DocGenerator:
             gaps=gaps,
             unbroken=report.org.chain_unbroken,
             hidden_count=hidden_count,
+            stages=stages,
+            unstaged_activity_ids=unstaged,
         )
+
+    def _stage_groups(self, snap, shown: set[str]) -> tuple[list[StageGroup], list[str]]:
+        """The lifecycle spine: stages in `PRECEDES` order, each holding its shown activities.
+
+        A stage with no shown activity is still returned — an empty phase in the journey is
+        information (it pairs with the SILENT_STAGE finding), and dropping it would leave a hole in
+        the diagram where the client expects a phase.
+        """
+        stage_cards = [c for c in snap.nodes.values() if c.type is NodeType.STAGE]
+        if not stage_cards:
+            return [], sorted(shown)
+
+        groups: dict[str, StageGroup] = {}
+        for card in stage_cards:
+            owner = next(
+                (
+                    snap.nodes[r].canonical_name
+                    for r in sorted(snap.inc(card.id, EdgeType.OWNS))
+                    if r in snap.nodes
+                ),
+                "",
+            )
+            groups[card.id] = StageGroup(
+                id=card.id,
+                label=card.canonical_name,
+                status=effective_status(card).value,
+                activity_ids=sorted(
+                    a for a in snap.inc(card.id, EdgeType.PART_OF) if a in shown
+                ),
+                owner_name=owner,
+                precedes=sorted(
+                    s
+                    for s in snap.out(card.id, EdgeType.PRECEDES)
+                    if s in {c.id for c in stage_cards}
+                ),
+            )
+
+        staged = {a for gp in groups.values() for a in gp.activity_ids}
+        ordered = _topo_order(set(groups), {sid: set(gp.precedes) for sid, gp in groups.items()})
+        return [groups[sid] for sid in ordered if sid in groups], sorted(shown - staged)
 
     def _continuation_label(self, snap, a: str, b: str) -> tuple[str, str]:
         # Prefer naming the bridging role (a handoff); else the shared artifact.
@@ -350,8 +469,19 @@ class DocGenerator:
                 return self._name(snap, art), "artifact"
         return "then", "flow"
 
-    def _narrative(self, snap, shown: set[str], flow) -> list[NarrativeStep]:
-        order = _topo_order(shown, flow)
+    def _narrative(
+        self, snap, shown: set[str], flow, stages: list[StageGroup] | None = None
+    ) -> list[NarrativeStep]:
+        """The ordered walkthrough. **Stage order wins over artifact flow when stages exist.**
+
+        This is the other half of "rendered on the stage spine" (P15c §7.3), and it is easy to miss:
+        grouping the *diagram* into subgraphs while leaving the prose ordered by artifact plumbing
+        produces a document whose picture and walkthrough disagree. `activity_flow` can only order
+        what the artifact/handoff links happen to connect, so two activities in different stages
+        with no shared artifact fall back to id order — which put "Write the BRD" (Discovery) ahead
+        of "Run the demo" (Pre-Sales) before this fix. Inside a stage, flow order still decides.
+        """
+        order = self._narrative_order(shown, flow, stages)
         steps: list[NarrativeStep] = []
         for aid in order:
             card = snap.nodes[aid]
@@ -377,6 +507,23 @@ class DocGenerator:
                     line += f"; produces {', '.join(outputs)} (final output)"
             steps.append(NarrativeStep(self._doc(card), line + "."))
         return steps
+
+    def _narrative_order(
+        self, shown: set[str], flow, stages: list[StageGroup] | None
+    ) -> list[str]:
+        """Stage order first, flow order within a stage; unstaged work last, in flow order."""
+        if not stages:
+            return _topo_order(shown, flow)
+        order: list[str] = []
+        placed: set[str] = set()
+        for sg in stages:  # already in PRECEDES order
+            members = {a for a in sg.activity_ids if a in shown and a not in placed}
+            for aid in _topo_order(members, flow):
+                order.append(aid)
+                placed.add(aid)
+        for aid in _topo_order(shown - placed, flow):
+            order.append(aid)
+        return order
 
     # --- 2) per-role SOPs ---
 

@@ -361,8 +361,10 @@ All from `brain/`, prefixed with `uv run [--extra vectors] python -m warp_compas
 |---|---|
 | `run-round [--bus PATH] [--session ID]` | The full round (Step 4). `--bus` overrides `BUS_ROOT`. |
 | `corroborate [--apply]` | Cross-person confirmation + conflict routing (Step 5). |
-| `docgen [--include-unverified] [--out FILE]` | Generate the deliverable docs (Step 6). |
+| `docgen [--include-unverified] [--out FILE]` | Generate the deliverable docs (Step 6). Since P15c this includes a **Gaps & Recommendations** section: cross-level misalignments (both accounts quoted), structural findings, and open questions. |
 | `completeness [--threads]` | Score the graph vs the ontology; list open threads. |
+| `coverage [--json]` | **Stage x role matrix (P15b) — "who do we invite next?"** Flags any lifecycle stage nobody who works in it has been interviewed about. |
+| `seed-roles [--dry-run] [--roles PATH]` | Seed `contracts/roles.json` into the graph. **Run before the first round**, and again after editing the registry (P15a). |
 | `plan [--persona ID] [--session ID]` | Emit per-persona Session Brief(s) from the graph. |
 | `ingest-log <path>` | Ingest a single Answer Log file by path (manual one-off). |
 | `check-models` | List which DeepSeek models your key can access. |

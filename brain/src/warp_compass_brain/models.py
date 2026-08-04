@@ -73,6 +73,17 @@ class Provenance(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
     status: ConfidenceStatus = ConfidenceStatus.UNVERIFIED
     ts: str = Field(..., description="ISO-8601 timestamp")
+    account: str = Field(
+        default="",
+        description=(
+            "THIS contributor's own description of the node, snapshotted at ingest (P15c). "
+            "Merge keeps one canonical card, so without this snapshot each person's wording is "
+            "overwritten and there is nothing left to compare two accounts FROM — which is exactly "
+            "why ADR #23 deferred semantic conflict detection. Retaining it is what lets a "
+            "cross-altitude divergence be reported as a finding with both sides quoted, instead of "
+            "being reconciled down to one surviving version. Empty on pre-P15c provenance entries."
+        ),
+    )
 
 
 class NodeCard(BaseModel):

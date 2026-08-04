@@ -83,13 +83,18 @@ def effective_status(provenance: list[Provenance]) -> ConfidenceStatus:
 
 
 def _prov_to_yaml(p: Provenance) -> dict:
-    return {
+    out = {
         "said_by": p.said_by,
         "session_id": p.session_id,
         "confidence": p.confidence,
         "status": p.status.value,
         "ts": p.ts,
     }
+    # Only written when present, so a graph seeded before P15c (or an edge, which has no account)
+    # doesn't grow an empty key in every provenance block.
+    if p.account:
+        out["account"] = p.account
+    return out
 
 
 class OkfGraphStore(GraphStore):

@@ -8,6 +8,7 @@ confidence filter decided upstream are preserved verbatim.
 
 from __future__ import annotations
 
+from ..alignment import Finding, FindingKind
 from .traverse import (
     CategorySection,
     DiagramEdge,
@@ -18,6 +19,7 @@ from .traverse import (
     ProblemEntry,
     RoleSOP,
     SOPActivity,
+    StageGroup,
 )
 
 _STATUS_MARKER = {
@@ -47,6 +49,7 @@ def render_markdown(docs: GeneratedDocs, names: PersonaNames | None = None) -> s
         _render_categories(docs.categories, names),
         _render_sops(docs.sops, names),
         _render_problems(docs.problems, docs.orphan_desires, names),
+        _render_findings(docs, names),
     ]
     return "\n".join(p for p in parts if p).rstrip() + "\n"
 
@@ -88,8 +91,18 @@ def _render_end_to_end(e2e: EndToEnd, names: PersonaNames) -> str:
                      "links are shown, never bridged.")
     lines.append("")
 
+    if e2e.stages:
+        owned = [s for s in e2e.stages if s.owner_name]
+        lines.append(
+            f"The journey has **{len(e2e.stages)} "
+            f"{'stage' if len(e2e.stages) == 1 else 'stages'}**: "
+            + " → ".join(s.label for s in e2e.stages)
+            + f". {len(owned)} of them {'has' if len(owned) == 1 else 'have'} a named owner."
+        )
+        lines.append("")
+
     if e2e.diagram_nodes:
-        lines.append(_mermaid(e2e.diagram_nodes, e2e.diagram_edges))
+        lines.append(_mermaid(e2e.diagram_nodes, e2e.diagram_edges, e2e.stages))
         lines.append("")
 
     if e2e.narrative:
@@ -116,9 +129,20 @@ def _render_end_to_end(e2e: EndToEnd, names: PersonaNames) -> str:
     return "\n".join(lines)
 
 
-def _mermaid(nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
+def _mermaid(
+    nodes: list[DiagramNode],
+    edges: list[DiagramEdge],
+    stages: list[StageGroup] | None = None,
+) -> str:
+    """The process map. With stages known, activities are grouped into Mermaid **subgraphs**.
+
+    That grouping is what makes the diagram legible to a client (P15c §7.3): it reads as the journey
+    of one piece of work, phase by phase, instead of a flat mesh. With no stages yet it falls back
+    to the P10 flat diagram unchanged — the spine is additive, never required.
+    """
     lines = ["```mermaid", "flowchart TD"]
-    for n in nodes:
+
+    def declare(n: DiagramNode, indent: str = "    ") -> list[str]:
         nid = _safe(n.id)
         label = _esc(n.label)
         if n.kind == "event":
@@ -129,10 +153,33 @@ def _mermaid(nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
             shape = f"{nid}({label})"
         else:  # activity
             shape = f"{nid}[{label}]"
-        lines.append(f"    {shape}")
+        return [f"{indent}{shape}"]
+
+    by_id = {n.id: n for n in nodes}
+    staged: set[str] = set()
+    for sg in stages or []:
+        members = [aid for aid in sg.activity_ids if aid in by_id]
+        if not members:
+            continue
+        staged.update(members)
+        owner = f" — {sg.owner_name}" if sg.owner_name else ""
+        lines.append(f'    subgraph {_safe(sg.id)}["{_esc(sg.label + owner)}"]')
+        for aid in members:
+            lines.extend(declare(by_id[aid], indent="        "))
+        lines.append("    end")
+
+    for n in nodes:
+        if n.id in staged:
+            continue
+        lines.extend(declare(n))
+
+    # Classes are emitted after every declaration: a `class` line inside a subgraph block is what
+    # makes Mermaid attach the node to the wrong container.
+    for n in nodes:
         cls = _node_class(n)
         if cls:
-            lines.append(f"    class {nid} {cls};")
+            lines.append(f"    class {_safe(n.id)} {cls};")
+
     for e in edges:
         arrow = "-.->" if e.dashed else "-->"
         lbl = f"|{_esc(e.label)}|" if e.label else ""
@@ -251,3 +298,101 @@ def _render_problems(
             lines.append(_node_line(d, names))
         lines.append("")
     return "\n".join(lines)
+
+
+# --- N) gaps & recommendations (P15c §7.3) ----------------------------------------------------
+#
+# The consulting half of the deliverable. Three ranked groups, in this order on purpose:
+#
+#   1. misalignments   — what people disagree about ACROSS levels. Both accounts quoted, neither
+#                        reconciled away (ADR #32). This is what a client argues with, and what
+#                        justifies the engagement.
+#   2. structural      — what the shape of the graph shows, with no disagreement needed at all.
+#   3. knowledge gaps  — what we still haven't been told. Last, because it's our homework.
+#
+# Every entry carries its source or the roles it concerns: a consulting finding without a source is
+# an opinion.
+
+_FINDING_LABEL = {
+    FindingKind.MISALIGNMENT: "Misalignment across levels",
+    FindingKind.UNOWNED_STAGE: "Unowned stage",
+    FindingKind.EXPECTATION_WITHOUT_EXECUTION: "Expectation with nothing behind it",
+    FindingKind.APPROVAL_WITHOUT_CRITERIA: "Approval with no criteria",
+    FindingKind.UNMEASURED_STAGE: "Unmeasured stage",
+    FindingKind.SINGLE_POINT_OF_FAILURE: "Single point of failure",
+    FindingKind.DUPLICATED_WORK: "Duplicated work",
+    FindingKind.SILENT_STAGE: "Silent stage (nobody interviewed)",
+    FindingKind.REPORTING_CYCLE: "Reporting line forms a loop",
+}
+
+
+def _render_findings(docs: GeneratedDocs, names: PersonaNames) -> str:
+    total = len(docs.misalignments) + len(docs.structural_findings) + len(docs.knowledge_gaps)
+    if not total:
+        return ""
+
+    lines = ["## Gaps & Recommendations", ""]
+    lines.append(
+        f"_{len(docs.misalignments)} misalignment(s), {len(docs.structural_findings)} structural "
+        f"finding(s), {len(docs.knowledge_gaps)} open question(s). Every item is derived from the "
+        "graph and carries its source._"
+    )
+    lines.append("")
+
+    if docs.misalignments:
+        lines.append("### Misalignments — recorded, not reconciled")
+        lines.append("")
+        lines.append(
+            "> Where an account differs **across levels of the organisation**, both versions are "
+            "kept as given. The difference *is* the finding: nobody has been asked to talk the "
+            "other out of their version."
+        )
+        lines.append("")
+        for f in docs.misalignments:
+            lines.extend(_render_misalignment(f, names))
+
+    if docs.structural_findings:
+        lines.append("### Structural findings")
+        lines.append("")
+        for f in docs.structural_findings:
+            lines.extend(_render_structural(f))
+        lines.append("")  # a heading straight after a list item doesn't render as a heading
+
+    if docs.knowledge_gaps:
+        lines.append("### Still to be told")
+        lines.append("")
+        lines.append(
+            "_Open questions, not defects in the business. These close as more people are "
+            "interviewed._"
+        )
+        lines.append("")
+        for g in docs.knowledge_gaps:
+            who = f" _(ask: {g.role_name})_" if g.role_name else ""
+            lines.append(f"- {g.detail}{who}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _render_misalignment(f: Finding, names: PersonaNames) -> list[str]:
+    lines = [f"#### {f.node_name or 'Unnamed'}", "", f.detail, ""]
+    for a in f.accounts:
+        level = f", level {a.altitude}" if a.altitude is not None else ", level unknown"
+        role = a.role_name or "role not yet known"
+        said = a.account.strip() or "_(their wording predates account capture)_"
+        lines.append(f"- **{role}**{level} — {_who(a.said_by, names)}: {said}")
+    lines.append("")
+    if f.recommendation:
+        lines.append(f"**Recommendation.** {f.recommendation}")
+        lines.append("")
+    return lines
+
+
+def _render_structural(f: Finding) -> list[str]:
+    label = _FINDING_LABEL.get(f.kind, f.kind.value.replace("_", " "))
+    lines = [f"- **[{label}]** {f.detail}"]
+    if f.role_names:
+        lines.append(f"  - Concerns: {', '.join(f.role_names)}")
+    if f.recommendation:
+        lines.append(f"  - _Recommendation:_ {f.recommendation}")
+    return lines

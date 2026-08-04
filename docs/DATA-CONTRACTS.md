@@ -82,6 +82,30 @@ Status only rises with evidence:
 `proposed → unverified (one source) → confirmed (corroborated by another persona/BA) → conflicting`.
 The doc generator renders **`confirmed` only** by default — truth rises, noise stagnates.
 
+### `Provenance.account` — each contributor's own words (P15c)
+
+Optional, added in P15c, back-compatible (empty on older entries). Merge keeps **one** canonical card
+per node: it absorbs aliases and appends provenance, but the surviving `description` is whoever got
+there first. So without a per-contributor snapshot there is nothing to compare two accounts *from* —
+which is exactly why ADR #23 deferred semantic conflict detection. `ingest` now snapshots the
+candidate's `description` onto the provenance entry, and that is what lets a cross-level divergence be
+**reported with both sides quoted** instead of reconciled down to one surviving version (ADR #32).
+
+### Divergence is classified, not always reconciled (ADR #32)
+
+`conflicting` no longer means one thing. The verdict branches on **derived altitude** — the number of
+`REPORTS_TO` hops from a role up to a role with no outgoing `REPORTS_TO` (ADR #31; nothing is
+declared, and P15b's `Role.reports_to` scoring is what makes it knowable):
+
+| Contributors | Verdict | What happens |
+|---|---|---|
+| Same altitude (peers) | `UNRESOLVED_CONFLICT` | Reconciliation thread routed to every contributor — two peers disagreeing about their own shared process is a data-quality problem. |
+| Different altitudes | **`MISALIGNMENT`** | **Nobody is asked to reconcile it.** Both accounts are kept with their holder and altitude, and it leads the deliverable's Gaps & Recommendations. |
+| Altitude unknown | `UNRESOLVED_CONFLICT` | Deliberate fallback: with no org chart we cannot claim a finding, and asking is how the chart gets filled in. |
+
+A `REPORTS_TO` **cycle is a finding, not a crash**: the roles are reported and treated as peers, and
+their depth stays unknown.
+
 ## 5. Answer Log (runner → brain) — `contracts/answer-log.schema.json`
 
 Immutable, append-only, **source of truth**. One file per session, one persona per session (no

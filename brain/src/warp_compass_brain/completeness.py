@@ -105,6 +105,10 @@ class GapKind(StrEnum):
     ONE_SIDED_HANDOFF = "one_sided_handoff"  # a handoff whose receiving side isn't described
     BROKEN_CHAIN = "broken_chain"            # an Activity off the first-trigger→final-output path
     UNRESOLVED_CONFLICT = "unresolved_conflict"  # a node still flagged conflicting
+    # P15c (ADR #32): a divergence that spans altitudes. NOT a defect and NOT routed for
+    # reconciliation — an exec-vs-doer difference is the finding the engagement sells. Only
+    # same-altitude divergence stays an UNRESOLVED_CONFLICT worth reconciling.
+    MISALIGNMENT = "misalignment"
 
 
 @dataclass(frozen=True)
@@ -480,20 +484,34 @@ class CompletenessEngine:
     # --- conflicts ---
 
     def _conflict_gaps(self, snap: _Snapshot) -> list[Gap]:
+        """Conflicting nodes, split by whether the divergence spans altitudes (P15c, ADR #32).
+
+        A cross-altitude divergence is emitted as ``MISALIGNMENT`` and is **not** a defect to close:
+        `crosspersona` routes no reconciliation thread for it and `docgen` reports it as a finding
+        with both accounts. Same-altitude divergence keeps the original behaviour — two peers
+        disagreeing about their own shared process really is a data-quality problem.
+        """
+        from .alignment import AlignmentEngine, derive_altitudes
+
+        alt = derive_altitudes(snap)
+        engine = AlignmentEngine(self._g)
         gaps: list[Gap] = []
         for card in snap.nodes.values():
-            if any(p.status is ConfidenceStatus.CONFLICTING for p in card.provenance):
-                role_id, role_name = (
-                    self._owning_role(card.id, snap)
-                    if card.type is NodeType.ACTIVITY
-                    else (None, None)
-                )
+            if not any(p.status is ConfidenceStatus.CONFLICTING for p in card.provenance):
+                continue
+            role_id, role_name = (
+                self._owning_role(card.id, snap)
+                if card.type is NodeType.ACTIVITY
+                else (None, None)
+            )
+            if engine.is_misalignment(card, snap, alt):
                 gaps.append(
                     Gap(
-                        kind=GapKind.UNRESOLVED_CONFLICT,
+                        kind=GapKind.MISALIGNMENT,
                         detail=(
-                            f"{card.type.value} '{card.canonical_name}' has conflicting accounts "
-                            "that need reconciling."
+                            f"{card.type.value} '{card.canonical_name}' is described differently "
+                            "at different levels of the organisation. Recorded as a finding, not "
+                            "reconciled."
                         ),
                         node_id=card.id,
                         node_name=card.canonical_name,
@@ -502,6 +520,21 @@ class CompletenessEngine:
                         latest_ts=_latest_ts(card),
                     )
                 )
+                continue
+            gaps.append(
+                Gap(
+                    kind=GapKind.UNRESOLVED_CONFLICT,
+                    detail=(
+                        f"{card.type.value} '{card.canonical_name}' has conflicting accounts "
+                        "that need reconciling."
+                    ),
+                    node_id=card.id,
+                    node_name=card.canonical_name,
+                    role_id=role_id,
+                    role_name=role_name,
+                    latest_ts=_latest_ts(card),
+                )
+            )
         return gaps
 
     # --- scores ---

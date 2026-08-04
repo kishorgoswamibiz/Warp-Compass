@@ -1,21 +1,22 @@
 # Phase 15 — Lifecycle-anchored interviewing, declared multi-role identity, and the alignment diagnostic
 
-> **Status:** **P15a + P15b SHIPPED (04 Aug 2026) · P15c NOT STARTED.** Written 03 Aug 2026 from the
-> owner's design ruling in session `opus-p15`. Supersedes the P12 "map your day" interview framing.
+> **Status:** ✅ **PHASE 15 COMPLETE — P15a + P15b + P15c all shipped 04 Aug 2026.** Written
+> 03 Aug 2026 from the owner's design ruling in session `opus-p15`. Supersedes the P12 "map your day"
+> interview framing.
 >
 > **Read §1 before anything else.** Several items in this plan were *rejected* by the owner during
 > design and are recorded in §1.2 so a later agent doesn't helpfully re-add them.
 >
-> **Done — §4, §5, §6, §8, §9.** The role registry, multi-select onboarding, `cli seed-roles` (run
+> **Everything in §4–§9 is built.** The role registry, multi-select onboarding, `cli seed-roles` (run
 > live — the §9 order-critical step is closed), the `KNOWN ROLES` block, the R3 corroboration
-> exclusion, the §4.5 dual-hat copy branch; then the full ontology diff, per-type completeness scoring
-> for Stage/Role/Objective, the stage-aware chain verdict, both prompt rewrites, the new field
-> openers, the probe budget, and `cli coverage`. ADR #33 logged; #31/#32 written and pending.
+> exclusion, the §4.5 dual-hat copy branch; the full ontology diff, per-type completeness scoring for
+> Stage/Role/Objective, the stage-aware chain verdict, both prompt rewrites, the new field openers, the
+> probe budget, `cli coverage`; and the alignment diagnostic — derived altitude,
+> `GapKind.MISALIGNMENT`, the `Provenance.account` snapshot, all eight §7.2 structural findings, and
+> the docgen stage spine + Gaps & Recommendations section. ADRs #31, #32, #33 all logged and marked
+> done. Verified: 204 brain tests, 68 pwa, plus an end-to-end smoke against the real `OkfGraphStore`.
 >
-> **NOT done — §7 (P15c)**: derived altitude, `GapKind.MISALIGNMENT`, the structural findings, the
-> provenance description snapshot, and the docgen stage-spine + Gaps & Recommendations section.
->
-> **Five deliberate deviations from this plan, all recorded so nobody "corrects" them back:**
+> **Eight deliberate deviations from this plan, all recorded so nobody "corrects" them back:**
 > 1. **§10's `lifecycle.py` change is unnecessary.** `role_title` is now a derived `" / "` mirror of
 >    `role_titles`, so every P13-era reader works untouched. Fewer readers to keep in sync.
 > 2. **§4.3 slightly overstates the unseeded failure.** Retrieval "returns nothing *relevant*" — but
@@ -29,6 +30,15 @@
 > 5. **A lone stage does not count as "positioned"**, so it cannot launder the activities inside it
 >    out of the broken-chain check. §6.2 didn't specify this; without it the noise just moves up a
 >    level.
+> 6. **Unknown altitude falls back to *reconciling*, not to claiming a misalignment.** §7.1's table
+>    has no row for it. With no org chart we cannot assert a finding, and asking is how the chart gets
+>    filled in — erring the other way manufactures findings out of missing data.
+> 7. **"Single point of failure" requires ≥2 activities in the stage.** §7.2 says "a stage whose every
+>    activity is performed by exactly one role", which fires on nearly every stage early in an
+>    engagement and drowns the real findings.
+> 8. **The §7.3 walkthrough is ordered by stage too, not just the diagram.** §7.3 only mentions the
+>    diagram, but grouping the picture while leaving the prose ordered by artifact plumbing produces a
+>    document whose two halves disagree — and the picture looks authoritative.
 
 ---
 

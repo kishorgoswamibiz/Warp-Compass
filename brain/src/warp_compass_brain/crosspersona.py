@@ -74,7 +74,11 @@ class CrossPersonaReport:
 
     routed: list[RoutedThread] = field(default_factory=list)
     handoffs: list[HandoffState] = field(default_factory=list)
+    #: Same-altitude divergence — a data-quality problem, routed for reconciliation.
     conflicts: list[str] = field(default_factory=list)
+    #: Cross-altitude divergence (P15c, ADR #32) — a FINDING. Deliberately **not** routed to
+    #: anybody: both accounts are preserved and `docgen` reports them side by side.
+    misalignments: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -289,9 +293,22 @@ class CrossPersonaEngine:
     # --- conflict routing ---------------------------------------------------------------------
 
     def _conflict_threads(self, snap, report: CrossPersonaReport) -> list[RoutedThread]:
+        from .alignment import AlignmentEngine, derive_altitudes
+
+        alt = derive_altitudes(snap)
+        alignment = AlignmentEngine(self._g)
+
         routed: list[RoutedThread] = []
         for nid, card in snap.nodes.items():
             if not any(p.status is ConfidenceStatus.CONFLICTING for p in card.provenance):
+                continue
+            if alignment.is_misalignment(card, snap, alt):
+                # P15c / ADR #32 — this divergence spans altitudes, so it is a FINDING, not a
+                # defect. Routing a reconciliation thread here is exactly how the system used to
+                # delete the exec-vs-doer signal the engagement exists to sell: every contributor
+                # got asked "how does it actually work?" until one version survived. Record it and
+                # ask nobody. `docgen` reports it with both accounts and who holds each.
+                report.misalignments.append(nid)
                 continue
             report.conflicts.append(nid)
             thread = OpenThread(

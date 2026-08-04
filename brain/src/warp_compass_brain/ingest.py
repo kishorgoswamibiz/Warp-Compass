@@ -73,6 +73,11 @@ class Ingestor:
                 confidence=self._conf,
                 status=ConfidenceStatus.UNVERIFIED,
                 ts=ts,
+                # P15c: keep THIS person's own words about the node. `_merge` below overwrites
+                # nothing but aliases, yet the surviving card carries only the FIRST contributor's
+                # description — so without this snapshot a later divergence has nothing to quote.
+                # This is the retention step ADR #23 said would be needed.
+                account=cand.description,
             )
             retrieved = self._resolver.retrieve(cand)
             adj = self._resolver.adjudicate(cand, retrieved)

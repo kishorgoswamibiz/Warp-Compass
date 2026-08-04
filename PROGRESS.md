@@ -147,6 +147,35 @@ _Nobody is actively working right now._ When you start, add a line:
 
 ## Blockers & open questions
 
+- ⚠️ **OPEN DESIGN QUESTION (owner raised 04 Aug 2026) — which HAT does a multi-role person's work
+  belong to?** Scenario: someone declares *Business Analysis Specialist + Technical Specialist*, says
+  "I do documentation" in one answer and "I do development" in another, and meanwhile a colleague
+  describes "the Technical Specialist" doing things. Verified facts about the system as built:
+  - **The extractor never knows who is speaking.** `Extractor.extract(answer)` receives one answer's
+    text and nothing else — no persona id, no declared roles. So an answer like *"I write the BRD"*
+    can only get a `PERFORMS` edge if **the answer itself names a role**. For a dual-hat person there
+    is no signal at all telling it which of their two hats did the work.
+  - **`role_titles` never reaches the brain's extractor.** It exists in the PWA, `Code.gs` and
+    `profile.json`; `lifecycle.py` reads the joined `role_title` for display only. Nothing feeds it
+    into extraction.
+  - **Questions route by persona, not by role.** `planner.plan(persona_id)` scopes gaps to nodes whose
+    provenance carries that `said_by`, so a dual-hat person receives the **union** of both hats'
+    questions in one brief. That part is correct by design — it is one human in one conversation.
+  - **The consequence that bites:** `_role_owner_personas` needs `PERFORMS` edges to know who owns
+    `role.technical-specialist`. If the dual-hat person's dev work never got attributed to that hat,
+    the role has **no owner**, so a colleague's handoff to "the Technical Specialist" routes back to
+    the colleague as *"who would know?"* forever — the exact §4.3 failure the alias table fixed, now
+    caused by hat attribution instead of naming.
+  - Also affected: `_owning_role` / `alignment._persona_role` pick **one** role (risk R5), so a
+    dual-hat person's derived altitude is whichever hat won — and their two hats may genuinely sit at
+    different levels.
+  **Proposed fix (not built, needs the owner's go-ahead):** inject a `SPEAKER` block into
+  `extractor._user_prompt()` carrying that persona's declared `role_titles`, mirroring how the live
+  runner already repeats `WHO YOU'RE TALKING TO` every turn. Then *"I write the BRD"* is a closed
+  choice between **their two hats** rather than an open guess, and single-role attribution improves
+  too. Needs `role_titles` plumbed from `profile.json` → `cycle.py` → `Ingestor.ingest_answer` →
+  `Extractor`. Cheap and well-scoped; would land as P16a.
+
 - ✅ **RESOLVED — DeepSeek key.** Both `DEEPSEEK_API_KEY` and `ELEVENLABS_API_KEY` are set in
   `brain/.env` and working (live ingest succeeded).
 - ✅ **RESOLVED — model IDs (both tiers).** `deepseek-v4-pro` (batch) and **`deepseek-v4-flash`

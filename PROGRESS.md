@@ -10,7 +10,7 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL PHASES DONE (P0–P15).** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL BUILD PHASES DONE (P0–P15).** **P16 is PLANNED ONLY — do not start it; the owner is deciding** (`docs/plan/phase-16-hat-fidelity.md`). Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
@@ -77,8 +77,12 @@
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **No build phase is open.** Operate it: `cli run-round` per round, `cli coverage` for
-  "who to invite next", `cli docgen` for the deliverable (now including Gaps & Recommendations).
+- **Next up:** **No build phase is open, and P16 must not be started without the owner's go-ahead.**
+  Operate it: `cli run-round` per round, `cli coverage` for "who to invite next", `cli docgen` for the
+  deliverable (now including Gaps & Recommendations). **P16 (`docs/plan/phase-16-hat-fidelity.md`) is
+  written and waiting on two owner decisions** — what altitude a dual-hat person carries, and whether
+  P16a alone is enough for now. It documents one live bug: a role a multi-hat person *declared* has no
+  owner, so a colleague's handoff to it loops on the colleague forever.
   **One owner action still outstanding: redeploy
   the Apps Script Web App** (see Blockers — it's still the P11 version, so `role_titles` cannot reach
   Drive). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
@@ -134,6 +138,8 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | DONE | agent:opus-p15b | `contracts/ontology.json` (+`Stage`,`Objective`, 5 edges, `cadence`, codes `00`/`11`) · `models.py` enums · `okf_store.py` `TYPE_DIRS` (`stages/`, `objectives/`) · `completeness.py` per-type scoring + `"either"` direction + `stage_chain_connectivity` + stage-aware chain verdict + registry-only nodes unscored · `prompts.ts` `COLD_START_OPENERS` + `SYSTEM_PROMPT` (two-pass, lifecycle, no "day") · `planner.py` mirror + 9 new field openers · `session.ts`/`runner.ts` probe budget (3 stage / 1 else) · `extractor.py` stage+cadence+objective rules · `coverage.py` + `cli coverage` (new) · **174 brain + 68 pwa tests** | 04 Aug 2026 |
 | P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | DONE | agent:opus-p15c | `brain/.../alignment.py` (new — `derive_altitudes`, `AlignmentEngine`, 9 `FindingKind`s) · `GapKind.MISALIGNMENT` + altitude branch in `completeness._conflict_gaps` · `crosspersona` routes **no** reconciliation thread for a cross-altitude divergence (`CrossPersonaReport.misalignments`) · `Provenance.account` snapshot in `ingest.py` + `models.py` + `node-card.schema.json` + `okf_store` serializer (optional, back-compatible — retires ADR #23's deferral) · `docgen/traverse.py` `StageGroup` + stage-ordered narrative + `KnowledgeGap` · `docgen/render.py` Mermaid **subgraphs** per stage + "Gaps & Recommendations" · **204 brain tests** · ADRs #31/#32 marked done | 04 Aug 2026 |
 
+| P16 | 16 | Hat fidelity: attributing work when one person wears several roles | TODO (**plan only — owner is deciding; do NOT start development**) | — | **Plan:** `docs/plan/phase-16-hat-fidelity.md`. Splits into **P16a** declared-role ownership (fixes the live routing bug — deterministic, no LLM, no extractor change) → **P16b** `SPEAKER` block in the extractor + both-hats fallback → **P16c** per-hat altitude → **P16d** SOP presentation. **P16a alone is a defensible stopping point.** Open for the owner: what altitude a dual-hat person carries; whether to spend interview turns on certainty. | 04 Aug 2026 |
+
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
 ---
@@ -174,7 +180,8 @@ _Nobody is actively working right now._ When you start, add a line:
   runner already repeats `WHO YOU'RE TALKING TO` every turn. Then *"I write the BRD"* is a closed
   choice between **their two hats** rather than an open guess, and single-role attribution improves
   too. Needs `role_titles` plumbed from `profile.json` → `cycle.py` → `Ingestor.ingest_answer` →
-  `Extractor`. Cheap and well-scoped; would land as P16a.
+  `Extractor`. Cheap and well-scoped; would land as P16b.
+  **➤ Now fully written up in `docs/plan/phase-16-hat-fidelity.md`** (04 Aug 2026). Writing it up changed the conclusion: the question splits into **four** separable problems, and the urgent one is not extraction at all — it is **routing**, which needs no LLM and no extractor change. A role someone **declared** at onboarding should simply count as owned (P16a). Plan only; the owner is deciding before any code is written.
 
 - ✅ **RESOLVED — DeepSeek key.** Both `DEEPSEEK_API_KEY` and `ELEVENLABS_API_KEY` are set in
   `brain/.env` and working (live ingest succeeded).

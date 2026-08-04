@@ -6,8 +6,10 @@ by [`PROGRESS.md`](./PROGRESS.md).
 
 ## The loop (every work session)
 
-1. **Read `PROGRESS.md` top-to-bottom.** It is the source of truth: status, task board,
-   blockers, the append-only handoff log.
+1. **Read `PROGRESS.md` top-to-bottom.** It is the source of truth for *what has been built*:
+   status, task board, blockers, the append-only handoff log. **Then skim
+   [`ISSUES.md`](./ISSUES.md)** — the source of truth for *what is wrong*: open bugs, known
+   limitations, and which of them affect a live testing session.
 2. **Pick a task** from the board that is `TODO` and whose dependencies are `DONE` (see the
    dependency spine). Prefer the **Next up** queue.
 3. **Claim it:** set the row to `IN-PROGRESS`, put your id in *Owner*, and add a line under
@@ -34,6 +36,11 @@ by [`PROGRESS.md`](./PROGRESS.md).
 - The relevant **contract** in `contracts/` is honored (and updated + version-bumped if the
   contract itself changed — flag contract changes loudly in the handoff log).
 - `PROGRESS.md` is updated and a handoff entry is appended.
+- **`ISSUES.md` is updated.** Any bug you *found* gets a new `WC-nn` row in §1 Open — including one
+  you found and fixed in the same session, because the lesson is worth more than the tidiness. Any
+  bug you *fixed* moves to §2 Resolved with its commit sha. **Never delete a row and never reuse an
+  id.** If you discovered a limitation you are choosing not to fix, log it as `ACCEPTED` with the
+  reason rather than leaving it in your head.
 
 ## Load-bearing rules (do not undo — see `docs/02 §4`)
 

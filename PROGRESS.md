@@ -93,6 +93,9 @@
   the old `persona.demo`/`p_alice` test data is gone.)
 - **Prompt tuning:** every prompt in the system is indexed with clickable line links in
   **`PROMPTS.md`** (repo root) — start there rather than grepping.
+- **Bugs & limitations:** tracked in **`ISSUES.md`** (repo root), with an *"Affects testing?"* column
+  so you can tell at a glance whether an open issue should change how you run a session. This file
+  stays the board for *what has been built*; `ISSUES.md` is the board for *what is wrong*.
 
 ## ▶ Resume here (start every session with this)
 

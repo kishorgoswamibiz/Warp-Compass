@@ -224,6 +224,37 @@ def cmd_run_round(args) -> int:
     return 0
 
 
+def cmd_seed_roles(args) -> int:
+    """Seed the engagement's role registry into the graph (P15a).
+
+    **Run this before the first round.** Answers ingested first mint role nodes under whatever name
+    the extractor picked, and the aliases arrive too late to stop "the PM" forking away from
+    "Delivery Specialist" — see `docs/plan/phase-15-lifecycle-and-alignment.md` §4.3.
+    """
+    from .roles import load_roles, seed_roles
+
+    registry = load_roles(args.roles) if args.roles else load_roles()
+    s = get_settings()
+    graph = _open_graph(s)
+    try:
+        result = seed_roles(graph, registry, now=_now(), dry_run=args.dry_run)
+    finally:
+        graph.close()
+
+    verb = "WOULD seed" if args.dry_run else "Seeded"
+    print(f"{verb} {len(registry.roles)} registry roles:")
+    print(f"  created   : {len(result.created)} ({', '.join(result.created) or 'none'})")
+    print(f"  updated   : {len(result.updated)} ({', '.join(result.updated) or 'none'})")
+    print(f"  unchanged : {len(result.unchanged)}")
+    if result.adopted:
+        print("  adopted   : aliases added to an EXISTING node instead of minting a rival —")
+        for slug, existing in result.adopted:
+            print(f"                {slug} → {existing}  (its id is stamped into edges; kept)")
+    if args.dry_run:
+        print("\n(dry run — nothing changed. Re-run without --dry-run to apply.)")
+    return 0
+
+
 def cmd_completeness(args) -> int:
     from dataclasses import asdict
 
@@ -567,6 +598,16 @@ def main(argv: list[str] | None = None) -> int:
         "--keep-archive", action="store_true", help="preserve _archive/ (retired people's folders)"
     )
     prst.set_defaults(func=cmd_reset_engagement)
+
+    psr = sub.add_parser(
+        "seed-roles",
+        help="seed contracts/roles.json into the graph — RUN BEFORE THE FIRST ROUND (P15a)",
+    )
+    psr.add_argument("--roles", default=None, help="registry path (default: contracts/roles.json)")
+    psr.add_argument(
+        "--dry-run", action="store_true", help="print what would change without writing"
+    )
+    psr.set_defaults(func=cmd_seed_roles)
 
     pc = sub.add_parser(
         "completeness", help="score the graph vs the ontology + list open threads (OKF graph)"

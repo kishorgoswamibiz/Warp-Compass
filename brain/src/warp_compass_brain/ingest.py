@@ -21,6 +21,7 @@ from .models import (
 from .ontology import Ontology
 from .queues import JsonlQueue
 from .resolve import Resolver
+from .roles import REGISTRY_SAID_BY
 from .slugs import mint_slug
 from .vectorindex.base import VectorIndex
 
@@ -161,8 +162,10 @@ class Ingestor:
             a for a in dict.fromkeys([*card.aliases, *new_aliases]) if a != card.canonical_name
         ]
         card.provenance.append(prov)
-        # corroboration by a second distinct persona → confirmed
-        if len({p.said_by for p in card.provenance}) >= 2:
+        # corroboration by a second distinct persona → confirmed. A seeded registry role is
+        # vocabulary, not testimony (P15a), so it must never be one of the two voices — otherwise
+        # every role would read as corroborated the moment one person mentioned it.
+        if len({p.said_by for p in card.provenance} - {REGISTRY_SAID_BY}) >= 2:
             for p in card.provenance:
                 if p.status == ConfidenceStatus.UNVERIFIED:
                     p.status = ConfidenceStatus.CONFIRMED

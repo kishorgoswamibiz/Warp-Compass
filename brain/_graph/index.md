@@ -7,12 +7,12 @@ pipeline — do not edit by hand.
 | Type | Count | Folder |
 |---|---|---|
 | Role | 10 | [roles/](roles/index.md) |
-| Activity | 24 | [activities/](activities/index.md) |
+| Activity | 0 | [activities/](activities/index.md) |
 | System | 0 | [systems/](systems/index.md) |
-| Artifact | 9 | [artifacts/](artifacts/index.md) |
-| Event | 2 | [events/](events/index.md) |
+| Artifact | 0 | [artifacts/](artifacts/index.md) |
+| Event | 0 | [events/](events/index.md) |
 | ApprovalPoint | 0 | [approval-points/](approval-points/index.md) |
-| Rule | 1 | [rules/](rules/index.md) |
+| Rule | 0 | [rules/](rules/index.md) |
 | Problem | 0 | [problems/](problems/index.md) |
 | Desire | 0 | [desires/](desires/index.md) |
 | KPI | 0 | [kpis/](kpis/index.md) |

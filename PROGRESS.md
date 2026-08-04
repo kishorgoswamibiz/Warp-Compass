@@ -10,7 +10,7 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL PHASES DONE (P0–P14).** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **P0–P14 DONE · P15a DONE · P15b/P15c TODO.** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
@@ -18,7 +18,15 @@
   readable Markdown files, now on **local disk** (`GRAPH_ROOT=brain/_graph`) rather than inside the
   Drive folder; people declare name + role once and are never asked again; folders and provenance
   name people, not UUIDs; and a person can be retired without the graph being touched.
-  **Nothing is blocked.**
+  **P15a** adds the governed role registry: onboarding is a **multi-select of 10 canonical roles**,
+  and their spoken synonyms ("the PM" → Delivery Specialist) are seeded into the graph so mentions
+  resolve onto one node instead of forking. **Nothing is blocked.**
+- **⚠ THE INTERVIEW IS STILL DAY-ANCHORED.** P15a shipped the identity half of P15; the half the
+  owner actually asked for — interviewing by the **lifecycle stage** rather than the clock — is
+  **P15b and has not started**. `contracts/ontology.json` still has no `Stage`/`Objective` node and
+  no `PRECEDES`/`PART_OF` edge, and both copies of `COLD_START_OPENERS` still say *"map your day from
+  the very beginning"*. Until P15b lands, a live session still produces the noise the owner reported
+  (*"as a BA I start my day checking my mails, but checking mail is not my job role"*).
 - **✅ Operator prerequisite (P14) — DONE 2026-08-03.** The Drive bus folder is **Available offline**
   (screenshot: `docs/images/drive-folder-available-offline.png`). The owner ran a green round and
   deleted the `G:\My Drive\warp-compass\graph` fallback copy; `brain/_graph` is now the only graph.
@@ -27,9 +35,15 @@
 - **⚠ ONE REAL GAP OPEN:** the **live Apps Script Web App is still the P11 version** — P13's
   `Code.gs` changes were committed but never deployed, so Drive `profile.json` files get no
   `role_title` and no per-folder `README.md`. Owner action, see Blockers.
-- **Overall:** ▰▰▰▰▰▰▰▰▰▰ 100% of the build + deployed + sync live. Optional-only work remains
-  (transcript Docs, semantic conflict tier, STT field-WER eval).
-- **Last updated:** 2026-08-03 · by `agent:opus-p15`
+- **Overall:** P0–P14 complete + deployed + sync live; **P15 is ~1/3 in** (P15a of P15a→b→c).
+- **Last updated:** 04 Aug 2026 · by `agent:opus-p15a`
+- **Verified (04 Aug 2026, P15a):** brain `ruff` clean + `pytest` **152 passed** (25 in the new
+  `test_roles.py`, 3 new dual-hat tests in `test_crosspersona.py`); PWA `typecheck` +
+  `typecheck:functions` clean + **61 vitest** (7 new `roles.test.ts`). **`cli seed-roles` run live
+  against the real graph** — created 10 Role nodes in `brain/_graph/roles/`, then re-run to prove
+  idempotency (`unchanged: 10`); spot-checked `role.delivery-specialist.md` carries `keywords:
+  [Project Manager, PM, DS, Delivery Manager]` and `said_by: registry`. Embedder mode chosen and
+  used: **`--extra vectors`** (fastembed 0.8.0, 384-dim).
 - **Verified (2026-08-03):** brain `ruff` clean + `pytest` **124 passed**; PWA `typecheck` +
   `typecheck:functions` clean + **45 vitest** + `npm run build` installable; `cli list-participants`
   live against the Drive bus returns both participants **with roles** in under a second.
@@ -43,8 +57,11 @@
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **One owner action: redeploy the Apps Script Web App** (see Blockers — it's still the
-  P11 version). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
+- **Next up:** **P15b** — the interview rewrite (ontology `Stage`/`Objective`/`cadence`, Stage+Role
+  completeness scoring, the lifecycle prompt rewrite in **both** prompt copies, the probe budget).
+  Brief: `docs/plan/phase-15-lifecycle-and-alignment.md` §5–§8. **One owner action first: redeploy
+  the Apps Script Web App** (see Blockers — it's still the P11 version, so `role_titles` cannot reach
+  Drive). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
   Drive sync), `cli docgen` for the deliverable. New in P13: `cli list-participants`,
   `cli retire-participant --id X`, `cli reset-engagement --yes`.
   **Before handing the app to a wider team**, run the clean-slate procedure in
@@ -93,6 +110,10 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 
 | P14 | 14 | Survive a Google-Drive-backed bus: graph moved to local disk + FS retry | DONE | agent:opus-p14 | `brain/.../fsretry.py` (new) · `bus/folder.py` + `graphstore/okf_store.py` all I/O retried · `config.py` `fs_retry_*` · `GRAPH_ROOT` now local (`brain/_graph`) · 13 new tests (113 total) · `brain/README.md` "When the bus is on Google Drive" · `DEPLOY.md` | 2026-07-28 |
 
+| P15a | 15 | Role registry (10 roles + aliases) + multi-select onboarding + `seed-roles` | DONE | agent:opus-p15a | `contracts/roles.json` (new) · `brain/.../roles.py` + `cli seed-roles` (new) · `pwa/src/sync/roles.ts` + parity test (new) · `OnboardingCard.tsx` role chips · `participant.ts` `role_titles[]` + derived `role_title` mirror · `extractor.py` `KNOWN ROLES` block · `ingest.py` + `crosspersona.py` exclude `said_by:registry` from corroboration (R3) · `crosspersona.py`/`planner.py` dual-hat self-handoff copy (`KIND_HANDOFF_SELF`) · `Code.gs` + `_sync.ts` + `remote.ts` `role_titles` to Drive · **152 brain + 61 pwa tests** · ADR #33 · `seed-roles` **run live** (10 nodes) | 04 Aug 2026 |
+| P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §5, §6, §8. Nothing started: `contracts/ontology.json` has no `Stage`/`Objective`/`PART_OF`/`PRECEDES`/`cadence`; `completeness.py` still scores Activities **only** (so `Role.completeness_fields` stays dead code and the org chart never closes — this is what blocks derived altitude); **both** `COLD_START_OPENERS` copies (`prompts.ts`, `planner.py`) still say "day"; `session.ts` `probed` is still a `Set`, so the 3-probes-per-stage-thread budget (§8.5) isn't in. Also §8.4 `cli coverage`. | 04 Aug 2026 |
+| P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §7. Needs P15b's stages first. No `alignment.py` yet; `ingest.py` does not yet snapshot each contributor's `description` onto `Provenance` (the retention ADR #23 deferred, and the precondition for retaining both accounts); `docgen/` has no stage-spine diagram and no Gaps & Recommendations section. ADRs #31/#32 are written but marked pending. | 04 Aug 2026 |
+
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
 ---
@@ -111,6 +132,27 @@ _Nobody is actively working right now._ When you start, add a line:
 - ✅ **RESOLVED — model IDs (both tiers).** `deepseek-v4-pro` (batch) and **`deepseek-v4-flash`
   (LIVE)** are both confirmed working: `cli check-models` lists both, and P5 ran a full live typed
   session on `v4-flash`. No fallback needed.
+- ✅ **DECIDED + RESOLVED (04 Aug 2026) — the embedder mode is `--extra vectors`, permanently.**
+  The clean slate left `brain/_state/` empty, so the choice was free and has now been made: **every**
+  brain command runs `uv run --extra vectors ...` (fastembed 0.8.0, 384-dim). Do **not** run a single
+  command without it — that is precisely how the mixed-dimension defect below was created. The
+  owner's ruling; `seed-roles` was run this way.
+- ✅ **RESOLVED (04 Aug 2026) — the order-critical `seed-roles` step is DONE.** `brain/_graph` was
+  recreated by `cli seed-roles` and holds the **10 canonical Role nodes with their aliases**, so the
+  next `run-round` resolves "the PM" onto `Delivery Specialist` from the first answer instead of
+  forking. Re-running is safe (idempotent — `unchanged: 10`). **Re-run it after any edit to
+  `contracts/roles.json`.**
+- ⚠️ **The one remaining participant's `role_titles` is still unverified.**
+  `kishor-goswami-business-analysis-specia-f25b` onboarded as free text before the multi-select
+  existed. Their `profile.json` could not be read during P15 planning (the Drive folder read hung),
+  and R6 below makes a missing `role_title` likely. Confirm with `cli list-participants` once the
+  Apps Script is redeployed; the recovery source is the Answer Log's identity-seed entry, never the
+  truncated participant id.
+- ✅ **RESOLVED by the clean slate (2026-08-04) — mixed-dimension vectors.** The owner ran
+  `OPERATOR-MANUAL.md` §1d (`cli reset-engagement`), so `brain/_state/` was **emptied** and
+  `GRAPH_ROOT` (`brain/_graph`) removed — the 52 node files were deleted from the working tree
+  (still in git `HEAD`, so recoverable). One participant remains on the bus
+  (`kishor-goswami-business-analysis-specia-f25b`). Original note kept for context:
 - ⚠️ **`brain/_state/vectors.sqlite` has mixed-dimension vectors** (256-dim hashing + 384-dim
   fastembed from runs that mixed embedder modes), so `ingest` against the existing store throws a
   matmul shape error. **Pick ONE embedder mode and stick with it** (run ingest *consistently* with
@@ -177,6 +219,138 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 04 Aug 2026 · agent:opus-p15a — P15a LANDED (role registry, multi-select identity, seed-roles run live). P15b/P15c still untouched.
+
+- **Picked up an interrupted session, not a clean start.** The previous session had written most of
+  P15a's code but committed nothing and logged nothing: `PROGRESS.md` still said P15 was
+  *"TODO (plan approved, no code yet)"* while 25 files were modified/untracked on disk. First action
+  was to establish what was actually there — brain **146 passed** / PWA **61 passed**, `ruff` and both
+  `typecheck`s clean — rather than trusting the board. **If you inherit this repo mid-phase, diff
+  before you read the status line.**
+- **What the interrupted session had already built (verified, not assumed), and it is good work:**
+  `contracts/roles.json` matching plan §4.1 exactly (10 roles, CEO/COO present, "Sales" as an AMS
+  alias); `roles.py` + `cli seed-roles` (idempotent, `--dry-run`, tops up aliases on an existing node,
+  and *adopts* a node already sitting at a different id rather than minting a rival); the PWA chip
+  list with a parity test against the contract; `Participant.role_titles[]`; the extractor's
+  `KNOWN ROLES` block correctly worded as a **preference**; and **R3 handled in both places** —
+  `said_by: "registry"` is excluded from the distinct-persona corroboration count in `ingest.py`
+  *and* `crosspersona.py`, so a seeded role can never read as corroborated by a real person.
+- **One design improvement over the plan worth knowing:** §10 called for editing `lifecycle.py` to
+  read `role_titles` with a `role_title` fallback. That turned out to be unnecessary and was
+  correctly skipped — `role_title` is now a **derived `" / "`-joined mirror** of `role_titles`, so
+  every P13-era reader (`lifecycle.py`, `Code.gs`'s README, `cli list-participants`) keeps working
+  with **zero** changes. Fewer readers to keep in sync is strictly better; don't "finish" §10 later.
+- **Finished the four loose ends P15a was missing.**
+  (1) **Dual-hat self-handoff copy (§4.5).** A Delivery Specialist who also does sales hands work to
+  themselves, and the standard copy told them *"another team handed it to you"*. Implemented as a new
+  thread kind `KIND_HANDOFF_SELF` minted in `crosspersona.py` when the receiving persona also owns the
+  **giving** role, with its own opener in `planner._opener_and_followups` (*"when you switch from your
+  X hat to your Y hat…"*). Chose a distinct kind over passing the persona into the copy function
+  because the thread is minted once and routed per-persona — a kind keeps `_opener_and_followups(t)`
+  pure and matches the existing dispatch. 3 tests, including the negative control that a **genuine**
+  second person still gets the stranger copy.
+  (2) **The end-to-end alias-routing test (§11 item 3).** Runs the real `Resolver` + real
+  `CrossPersonaEngine`: seeded, "Project Manager" is determined by an exact alias hit (`via="alias"`,
+  score 1.0) and the `handoff_confirm` thread lands in the **Delivery Specialist's** brief; unseeded,
+  the forked role has no owner and the BA gets `handoff_trace` — *"who would know?"* — while the DS is
+  never asked.
+  (3) ADRs **#31–#33** in `docs/DECISIONS.md`, (4) `PROMPTS.md` §5c/§6/§7 and `DATA-CONTRACTS.md` §7.
+- **Killed one dishonest test while writing it.** My first negative-case test asserted the unseeded
+  verdict *is* `"new"`, propped up by a stub LLM that agreed with whatever retrieval ranked first.
+  That passes for the wrong reason: with one Role node in the graph the lexical index returns it as a
+  neighbour **whatever** its similarity, so the outcome really depends on what the adjudicating model
+  decides about "Project Manager" vs "Delivery Specialist" — which is the actual problem, not a
+  determinable fact. Rewrote it to assert the load-bearing truth instead: without the alias table
+  **no exact match protects the decision** (`[r.via for r in retrieved] == ["vector"]`, score < 0.9),
+  and split the routing consequence into its own test that starts from an already-forked node. Plan
+  §4.3's prose slightly overstates this — it says retrieval "returns nothing relevant", which is true
+  of relevance but not of emptiness.
+- **Operational steps actually performed (both were owner decisions this session):**
+  **Embedder mode fixed at `--extra vectors`** (fastembed 0.8.0, 384-dim) — the clean slate made the
+  choice free and it is now permanent; running one command without the flag re-creates the
+  mixed-dimension defect. Then **`cli seed-roles` run live**: dry-run first (10 creates, nothing
+  pre-existing), applied, `brain/_graph` recreated with 10 role nodes, re-run to prove idempotency
+  (`unchanged: 10`). Spot-checked `role.delivery-specialist.md`: `keywords: [Project Manager, PM, DS,
+  Delivery Manager]`, `said_by: registry`, `status: unverified`. **The order-critical migration step
+  in plan §9 is therefore closed.**
+- **Verified:** brain `ruff` clean + `pytest` **152 passed** (was 124 pre-P15a); PWA `typecheck` +
+  `typecheck:functions` clean + **61 vitest** (was 45).
+- **Next: P15b, and it is the half the owner actually asked for.** P15a was the identity plumbing;
+  the interview is **still day-anchored**. Nothing in §5/§6/§8 has been started — no `Stage` or
+  `Objective` in the ontology, no `PART_OF`/`PRECEDES`, no `cadence`; `completeness.py` still scores
+  Activities only (so `Role.completeness_fields` remains dead code, the org chart never closes, and
+  derived altitude stays impossible); both `COLD_START_OPENERS` copies still say *"map your day"*; and
+  `session.ts`'s `probed` is still a `Set`, so the 3-probes-per-stage-thread budget isn't in.
+- **Gotchas:** (1) **`ruff format` is NOT this repo's discipline** — untouched files like
+  `completeness.py` fail `ruff format --check`. Only `ruff check` (E501 at 100 cols) is the gate;
+  don't "fix" formatting repo-wide, it'll bury a real diff. (2) **Editing `contracts/roles.json` is a
+  three-step change, not one:** update the contract, mirror it into `pwa/src/sync/roles.ts`
+  (`roles.test.ts` fails loudly on drift), **and re-run `cli seed-roles`** or the new alias never
+  reaches the graph. (3) **A wrong alias is worse than a missing one** — a missing synonym forks a
+  role (visible, fixable), a synonym attached to the wrong role silently **merges two real roles into
+  one node** and cannot be unwound, since node ids are stamped into provenance and every edge. This is
+  why "MD", "Founder" and "Operations Head" are deliberately absent from the CEO/COO entries. (4) The
+  participant id is minted from the **first** selected role only and never moves — adding a hat later
+  is correct and must not re-mint (ADR #29). (5) `brain/_graph/` is tracked, so seeding shows up as 12
+  new files in the diff; that's intended.
+
+### 2026-08-03 · agent:opus-p15 — P15 designed and planned (no code yet): lifecycle interviewing, multi-role identity, alignment diagnostic
+- **Owner's design ruling, from field experience.** The interviewer keeps asking day-to-day questions
+  ("what's the first piece of work that lands on your plate") and the owner's own answer as a BA was
+  *"I check my mails — which is not my job role."* Real role work is **per-project, not daily**:
+  pre-sales → signing → kickoff → discovery → BRD → build → UAT → go-live → support. **The unit of the
+  interview becomes the lifecycle STAGE, not the clock.** End goal is explicitly to replace an
+  EY/PwC-style engagement, so the deliverable is **SOP + gap-and-recommendation report**.
+- **Three of my proposals were rejected by the owner, correctly — recorded in the plan §1.2 so nobody
+  re-adds them.** (a) A special "that's not mine, X does it" routing mechanism — unnecessary,
+  `crosspersona.py:306 _role_owner_personas()` already routes the question into X's brief. (b)
+  Altitude-specific prompts — "no bifurcation between what question the CEO gets and what the
+  developer gets"; the graph differentiates, not a script. (c) A declared seniority/`level` field —
+  altitude is **derived** from `REPORTS_TO` depth instead, which is strictly better and needs nothing
+  predefined. Multi-client separation deferred (one client for now).
+- **New requirement: multi-select roles at onboarding**, from a fixed list of 8 the owner supplied
+  (BA Specialist, Technical Specialist, Solution Architect, Delivery Specialist, Account Management
+  Specialist, QA Head, QA Specialist, Finance). The owner's CEO confirmed some Delivery Specialists
+  also do sales, so one person must be able to hold several roles.
+- **Answered the owner's "are synonyms needed?" question: yes, load-bearing** — traced in plan §4.3.
+  `find_by_alias` is an **exact** whole-string match (`okf_store.py:135`), and the vector fallback
+  embedder is lexical-only, so without an alias table "the PM" resolves to *new* Role node
+  (`resolve.py:97`), `_role_owner_personas` finds no owner, `_handoff_state` returns
+  `route_discoverer`, and the BA gets asked "who would know?" **forever** while the real Delivery
+  Specialist is never asked. The alias table is the precondition for the routing design the owner
+  chose. Registry goes in `contracts/roles.json`, consumed by the PWA chips, a new `cli seed-roles`,
+  and the extractor prompt.
+- **Four code-verified defects the plan fixes.** (1) The day-framing lives in 4 layers and has already
+  leaked into the graph — `evt.start-of-day.md` is a real node. (2) No `Stage` node, so
+  `activity_flow()` guesses order from artifact plumbing → the current `deliverable.md` reports 3
+  false broken chains and hides 21 activities. (3) **`Role.completeness_fields` is dead code** —
+  `assess()` scores Activities only, so `REPORTS_TO` is never asked about and the org chart never
+  closes (this is what blocks derived altitude). (4) Divergence is engineered away: `CONFLICTING` →
+  reconciliation thread routed to every contributor, i.e. the system deletes exactly the
+  exec-vs-doer signal the engagement sells.
+- **Owner closed all three open questions (2026-08-04):** "Sales" is an **alias** of Account
+  Management Specialist (not a 9th role); **CEO and COO added** as roles 9–10 (which also gives
+  altitude derivation a natural root — the CEO is the role with no outgoing `REPORTS_TO`); probe
+  budget **3 per stage thread** confirmed. Plan §4.1/§8.5 updated from "open" to "decided".
+- **Discovered while checking the live graph: the owner has run the clean slate.** `brain/_graph` is
+  gone (52 files deleted from the working tree, still in git `HEAD`), `brain/_state/` is empty, and
+  the bus holds one participant. **This deleted the hardest part of P15's migration before it was
+  written:** the old graph's role nodes were named with what are now *aliases*
+  (`role.business-analyst`, `role.account-manager`, `role.quality-analyst`, `role.development-team`),
+  and node ids are stamped into provenance and every edge, so they could not have been renamed in
+  place — a rebuild from Answer Logs was the only clean route. Plan §9 rewritten accordingly: the
+  only remaining migration step is **run `seed-roles` before the next `run-round`**, or that round's
+  answers fork role nodes before the aliases exist to catch them. `evt.start-of-day` is already gone.
+- **Could not verify the remaining participant's `profile.json`** — the Drive folder read hung (the
+  P14 stream-only symptom; not retried). So whether it carries `role_title` is unknown, and R6 (Apps
+  Script still on the P11 build) makes its absence likely.
+- **Did NOT write code.** Plan only: `docs/plan/phase-15-lifecycle-and-alignment.md` (sub-phases,
+  ontology diff, full rewritten prompt text, migration, files, test plan, ADRs #31–#33, 6 risks).
+  **Open for the owner:** is "Sales" its own 9th role or an alias of Account Management Specialist?
+  Is a CEO/leadership role needed (the owner intends to interview the CEO, but the supplied list has
+  no exec entry and free text disappears once the field is a fixed multi-select)? **Assumed** (§8.5,
+  needs a field test): probe budget 3 per stage thread, 30-word cap kept.
 
 ### 2026-08-03 · agent:opus-p15 — P14 operator step confirmed; profile `role_title` defect found; prompts indexed
 - **Owner confirmed P14's must-dos are done:** bus folder set **Available offline**, a full round ran

@@ -120,6 +120,67 @@ describe("participant identity", () => {
     expect(getParticipant(s)).toBeNull();
   });
 
+  // ── P15a: several hats per person ──────────────────────────────────────────
+  it("stores every selected role and derives the joined mirror", () => {
+    const s = fakeStorage();
+    const p = createParticipant(
+      { name: "Rahul Mehta", roles: ["Delivery Specialist", "Account Management Specialist"] },
+      s,
+    );
+    expect(p.role_titles).toEqual(["Delivery Specialist", "Account Management Specialist"]);
+    expect(p.role_title).toBe("Delivery Specialist / Account Management Specialist");
+    expect(getParticipant(s)?.role_titles).toEqual([
+      "Delivery Specialist",
+      "Account Management Specialist",
+    ]);
+  });
+
+  it("mints the id from the FIRST role only, so a second hat can't move it (ADR #29)", () => {
+    const s = fakeStorage();
+    const created = createParticipant({ name: "Rahul", roles: ["Delivery Specialist"] }, s);
+
+    const dualHatted = updateIdentity(
+      { roles: ["Delivery Specialist", "Account Management Specialist"] },
+      s,
+    );
+
+    expect(dualHatted.participant_id).toBe(created.participant_id);
+    expect(dualHatted.role_titles).toHaveLength(2);
+    expect(getParticipant(s)?.participant_id).toBe(created.participant_id);
+  });
+
+  it("drops blanks and duplicates rather than storing a ragged list", () => {
+    const s = fakeStorage();
+    const p = createParticipant({ name: "Asha", roles: ["Finance", "  ", "Finance", ""] }, s);
+    expect(p.role_titles).toEqual(["Finance"]);
+  });
+
+  it("reads a P13-era single-role record FORWARD instead of re-onboarding the device", () => {
+    // Re-onboarding would mint a SECOND id for the same person and orphan their existing facts.
+    const s = fakeStorage();
+    s.setItem(
+      KEY,
+      JSON.stringify({
+        participant_id: "ajay-delivery-delivery-spec-1a2b",
+        persona_id: "ajay-delivery-delivery-spec-1a2b",
+        display_name: "Ajay Delivery",
+        role_title: "Delivery Specialist / Project Manager",
+        onboarded_at: "2026-07-28T09:00:00.000Z",
+      }),
+    );
+
+    const p = getParticipant(s);
+    expect(p?.participant_id).toBe("ajay-delivery-delivery-spec-1a2b");
+    expect(p?.role_titles).toEqual(["Delivery Specialist", "Project Manager"]);
+    expect(isOnboarded(s)).toBe(true);
+  });
+
+  it("still refuses a record with no role at all (genuine pre-P13 device)", () => {
+    const s = fakeStorage();
+    s.setItem(KEY, JSON.stringify({ participant_id: "p_x", persona_id: "p_x", role_titles: [] }));
+    expect(getParticipant(s)).toBeNull();
+  });
+
   it("switch user clears the device only", () => {
     const s = fakeStorage();
     createParticipant({ name: "Rahul", role: "Analyst" }, s);

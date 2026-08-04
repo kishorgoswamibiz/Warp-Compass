@@ -135,6 +135,21 @@ ownership ("what do *you* need in hand") which would be wrong for someone else's
 | `_ORPHAN_FIELD_ASK` — per-field phrase fragments | [`planner.py#L293`](brain/src/warp_compass_brain/planner.py#L293) |
 | `_orphan_opener_and_followups()` | [`planner.py#L304`](brain/src/warp_compass_brain/planner.py#L304) |
 
+### 5c. Dual-hat self-handoff copy (P15a)
+
+A multi-role person hands work from one of their own hats to another. The standard handoff copy says
+a stranger passed it over, which reads as a bug and invites a "that's me" non-answer — so the thread
+is reworded rather than suppressed (the switch is where dual-hat work most often leaks).
+
+| What | Where |
+|---|---|
+| `KIND_HANDOFF_SELF` — the thread kind | [`crosspersona.py#L43`](brain/src/warp_compass_brain/crosspersona.py#L43) |
+| Where the twin is minted (giver's owners ∩ receiver's owners) | [`crosspersona.py#L230`](brain/src/warp_compass_brain/crosspersona.py#L230) |
+| The opener — *"when you switch from your X hat to your Y hat…"* | [`planner.py#L385`](brain/src/warp_compass_brain/planner.py#L385) |
+
+> Guarded by `test_self_handoff_copy_never_says_another_team` — if you rewrite this copy, keep it
+> free of "another team"/"another role", which is the entire point of the branch.
+
 ---
 
 ## 6. Extractor prompt (graph quality, not conversation)
@@ -146,6 +161,7 @@ knowledge graph — not what the person hears.
 |---|---|
 | `_SYSTEM` — the extraction contract | [`brain/src/warp_compass_brain/extractor.py#L17`](brain/src/warp_compass_brain/extractor.py#L17) |
 | `_user_prompt()` — wraps the allowed types + the answer | [`extractor.py#L73`](brain/src/warp_compass_brain/extractor.py#L73) |
+| `_known_roles_block()` — the `KNOWN ROLES` list injected every call (P15a) | [`extractor.py#L95`](brain/src/warp_compass_brain/extractor.py#L95) |
 
 Rules worth knowing before you touch it:
 
@@ -155,6 +171,13 @@ Rules worth knowing before you touch it:
 - **ABSTRACT PEOPLE INTO ROLES** ([#L42](brain/src/warp_compass_brain/extractor.py#L42)) — never emit "John"; emit "Discount Approver". People change, roles persist.
 - Node/edge types come from [`contracts/ontology.json`](contracts/ontology.json) — the prompt only
   *references* the allowed list, it doesn't define it. Add a type there, not here.
+- **`KNOWN ROLES` is a PREFERENCE, not a limit** ([#L110](brain/src/warp_compass_brain/extractor.py#L110)).
+  It lists the canonical names from [`contracts/roles.json`](contracts/roles.json) so "the PM" is
+  emitted as "Delivery Specialist" — fixing role forking at the source rather than repairing it at
+  resolve time. ⚠ **Never reword this to "only these roles exist".** Real interviews name roles
+  nobody self-declares as (`End Client`, `Resource Manager`, `Development Team`), and closing the
+  list would delete the client from the process map. This is the one place where the contract is
+  *open* — unlike `ontology.json`'s node/edge types, which are closed.
 
 ---
 
@@ -162,13 +185,27 @@ Rules worth knowing before you touch it:
 
 | What | Where |
 |---|---|
-| Card copy — "Who's using this device?", field labels, the reassurance line | [`pwa/src/screens/OnboardingCard.tsx#L53`](pwa/src/screens/OnboardingCard.tsx#L53) |
+| Card copy — "Who's using this device?", field labels, the reassurance line | [`pwa/src/screens/OnboardingCard.tsx#L67`](pwa/src/screens/OnboardingCard.tsx#L67) |
+| Role multi-select copy — "Your role(s)" + "Pick every role you hold…" (P15a) | [`OnboardingCard.tsx#L88`](pwa/src/screens/OnboardingCard.tsx#L88) |
+| The 10 chip labels — **generated from the contract, not typed here** | [`contracts/roles.json`](contracts/roles.json) → [`pwa/src/sync/roles.ts#L24`](pwa/src/sync/roles.ts#L24) |
 | `IDENTITY_QUESTION` — the question this card stands in for, replayed into the Answer Log | [`prompts.ts#L35`](pwa/src/runner/prompts.ts#L35) |
-| `identityAnswer()` — `"I'm {name}, I'm the {role}."`, seeded as the log's first entry | [`prompts.ts#L43`](pwa/src/runner/prompts.ts#L43) |
+| `rolePhrase()` — `"Delivery Specialist and Account Management Specialist"` (P15a) | [`prompts.ts#L49`](pwa/src/runner/prompts.ts#L49) |
+| `identityAnswer()` — `"I'm {name}, I'm the {roles}."`, seeded as the log's first entry | [`prompts.ts#L66`](pwa/src/runner/prompts.ts#L66) |
 | `firstName()` — used by the greeting | [`prompts.ts#L38`](pwa/src/runner/prompts.ts#L38) |
 
 > `identityAnswer()` is how the **graph** learns the person's role at turn zero — it's fed through
 > the extractor like any other answer. Change its shape and you change what the extractor sees.
+>
+> ⚠ With several roles it must keep them as **separate names joined by "and"** (`rolePhrase`), not a
+> `" / "`-joined compound: the extractor reads a slash-joined string as one job title and mints a
+> single fused Role node, which defeats the whole multi-select. The `" / "` form is only the
+> back-compat mirror stored in `Participant.role_title` for P13-era readers.
+>
+> **Editing the chip list is a contract change, not a copy change.** Add the role to
+> `contracts/roles.json` (with its spoken synonyms) and mirror it into `pwa/src/sync/roles.ts` —
+> `roles.test.ts` fails loudly if the two drift, the same discipline §2 uses for the duplicated
+> openers. Then run `cli seed-roles` so the alias lands in the graph before the next round; aliases
+> are what stop "the PM" forking away from "Delivery Specialist" (ADR #33).
 
 ---
 

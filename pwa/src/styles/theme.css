@@ -759,6 +759,56 @@ body {
   height: 48px;
   padding: 0 14px;
 }
+.wc-field-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--wc-ink-soft);
+}
+
+/* Role multi-select (P15a). Chips rather than a native <select multiple>, which is unusable on a
+   phone. `flex-wrap` keeps all 10 roles reachable without a scroll trap inside the card. */
+.wc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wc-chip {
+  appearance: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wc-ink-soft);
+  background: var(--wc-bg-2);
+  border: 1px solid var(--wc-line);
+  border-radius: var(--wc-radius-pill);
+  padding: 9px 15px;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.wc-chip:hover {
+  border-color: var(--wc-green);
+  color: var(--wc-ink);
+}
+.wc-chip-on {
+  background: var(--wc-green);
+  border-color: var(--wc-green);
+  color: #fff;
+}
+.wc-chip-on:hover {
+  background: var(--wc-green-deep);
+  border-color: var(--wc-green-deep);
+  color: #fff;
+}
+/* Keyboard path: Enter on the name field focuses the first chip, so the ring must be visible. */
+.wc-chip:focus-visible {
+  outline: 2px solid var(--wc-green-deep);
+  outline-offset: 2px;
+}
+
 .wc-onboard-note {
   margin-top: 18px;
 }

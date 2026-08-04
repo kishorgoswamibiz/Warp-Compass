@@ -39,9 +39,32 @@ export function firstName(identity: Identity): string {
   return identity.display_name.trim().split(/\s+/)[0] || identity.display_name.trim();
 }
 
-/** What the person "said" at onboarding, as the Answer Log's first entry (P13 §4.1). */
+/**
+ * The person's role(s) as a spoken phrase: "Delivery Specialist", or "Delivery Specialist and
+ * Account Management Specialist" for someone wearing two hats (P15a).
+ *
+ * Prefers `role_titles` and falls back to splitting the joined `role_title`, so a device that
+ * onboarded before P15a still reads correctly.
+ */
+export function rolePhrase(identity: Identity): string {
+  const roles = (
+    identity.role_titles?.length ? identity.role_titles : identity.role_title.split(" / ")
+  )
+    .map((r) => r.trim())
+    .filter(Boolean);
+  if (roles.length <= 1) return roles[0] ?? identity.role_title.trim();
+  return `${roles.slice(0, -1).join(", ")} and ${roles[roles.length - 1]}`;
+}
+
+/**
+ * What the person "said" at onboarding, as the Answer Log's first entry (P13 §4.1).
+ *
+ * With several roles this is the sentence the extractor mints **one Role node per role** from, which
+ * is the whole point of the multi-select — so keep them as separate names here rather than a
+ * slash-joined compound the extractor would read as a single job title.
+ */
 export function identityAnswer(identity: Identity): string {
-  return `I'm ${identity.display_name.trim()}, I'm the ${identity.role_title.trim()}.`;
+  return `I'm ${identity.display_name.trim()}, I'm the ${rolePhrase(identity)}.`;
 }
 
 export const SYSTEM_PROMPT = `You are Warp Compass, a warm, sharp interviewer mapping how one person's work really happens. You speak in their own words, one short question at a time, like a curious colleague — never a form to fill in.
@@ -125,7 +148,7 @@ export function buildUserPrompt(input: UserPromptInput): string {
   if (identity) {
     parts.push("=== WHO YOU'RE TALKING TO ===");
     parts.push(`Name: ${identity.display_name} (call them ${firstName(identity)})`);
-    parts.push(`Role: ${identity.role_title}`);
+    parts.push(`Role(s): ${rolePhrase(identity)}`);
     parts.push("You already know this. Do NOT ask for their name or role.");
     parts.push("");
   }

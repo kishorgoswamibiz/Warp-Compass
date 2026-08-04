@@ -1,11 +1,11 @@
 ---
 type: Role
-id: role.chief-operating-officer
-title: Chief Operating Officer
+id: role.chief-executive-officer
+title: Chief Executive Officer
 keywords:
-- COO
-- Chief Operating
-description: Chief Operating Officer — a role in this organisation. Seeded from the engagement's role
+- CEO
+- Chief Executive
+description: Chief Executive Officer — a role in this organisation. Seeded from the engagement's role
   registry so that every way people refer to it resolves onto one node; its responsibilities are filled
   in as people describe their work.
 status: unverified
@@ -22,11 +22,11 @@ edges: []
 timestamp: '2026-08-04T04:30:08.909539+00:00'
 ---
 
-# Chief Operating Officer
+# Chief Executive Officer
 
-> **Role** `role.chief-operating-officer` · status **unverified** · keywords: COO, Chief Operating
+> **Role** `role.chief-executive-officer` · status **unverified** · keywords: CEO, Chief Executive
 
-Chief Operating Officer — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
+Chief Executive Officer — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
 
 ## Facts
 - 2026-08-04 — registry (session seed.roles, confidence 1, unverified)

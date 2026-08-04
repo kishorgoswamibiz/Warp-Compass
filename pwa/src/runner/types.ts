@@ -38,7 +38,14 @@ export interface BriefThread {
  */
 export interface Identity {
   display_name: string;
+  /** Every declared role, joined with " / ". Always present — the P13-era shape. */
   role_title: string;
+  /**
+   * The declared roles as chosen (P15a). Optional so a pre-P15 caller still type-checks; prompts
+   * prefer it when present because "the Delivery Specialist and Finance" reads better than a
+   * slash-joined string, and the extractor gets two clean Role names instead of one compound.
+   */
+  role_titles?: string[];
 }
 
 /** The persona-scoped memory view + ranked open threads. Guidance, not a script. */

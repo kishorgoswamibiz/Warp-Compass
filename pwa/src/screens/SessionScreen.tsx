@@ -137,7 +137,11 @@ export function SessionScreen({
     const sessionBrief = brief ?? newColdBrief(participant.persona_id);
     const runner = new Runner(sessionBrief, new WorkerLLMProvider(), clock, {
       participantId: participant.participant_id,
-      identity: { display_name: participant.display_name, role_title: participant.role_title },
+      identity: {
+        display_name: participant.display_name,
+        role_title: participant.role_title,
+        role_titles: participant.role_titles,
+      },
       seedIdentity: needsIdentitySeed(),
     });
     runnerRef.current = runner;

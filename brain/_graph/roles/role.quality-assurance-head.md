@@ -1,13 +1,12 @@
 ---
 type: Role
-id: role.delivery-specialist
-title: Delivery Specialist
+id: role.quality-assurance-head
+title: Quality Assurance Head
 keywords:
-- Project Manager
-- PM
-- DS
-- Delivery Manager
-description: Delivery Specialist — a role in this organisation. Seeded from the engagement's role registry
+- QA Head
+- QA Lead
+- Head of QA
+description: Quality Assurance Head — a role in this organisation. Seeded from the engagement's role registry
   so that every way people refer to it resolves onto one node; its responsibilities are filled in as people
   describe their work.
 status: unverified
@@ -24,11 +23,11 @@ edges: []
 timestamp: '2026-08-04T04:30:08.909539+00:00'
 ---
 
-# Delivery Specialist
+# Quality Assurance Head
 
-> **Role** `role.delivery-specialist` · status **unverified** · keywords: Project Manager, PM, DS, Delivery Manager
+> **Role** `role.quality-assurance-head` · status **unverified** · keywords: QA Head, QA Lead, Head of QA
 
-Delivery Specialist — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
+Quality Assurance Head — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
 
 ## Facts
 - 2026-08-04 — registry (session seed.roles, confidence 1, unverified)

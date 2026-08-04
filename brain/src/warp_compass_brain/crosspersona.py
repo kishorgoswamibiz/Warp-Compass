@@ -27,18 +27,20 @@ Persona scoping = provenance ``said_by`` (ADR #17; there is no ``:Persona`` node
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .completeness import load_snapshot
 from .graphstore.base import GraphStore
 from .models import ConfidenceStatus, EdgeType, NodeType
 from .ontology import Ontology
+from .roles import REGISTRY_SAID_BY
 from .threads import OpenThread
 
 # Thread kinds this module mints (the Planner knows these for opener/followup scaffolding).
 KIND_HANDOFF_CONFIRM = "handoff_confirm"   # routed to the RECEIVER: "do you receive X from A?"
 KIND_HANDOFF_TRACE = "handoff_trace"       # routed to the DISCOVERER: receiver not interviewed yet
 KIND_CROSS_CONFLICT = "cross_conflict"     # routed to every contributor of a conflicting node
+KIND_HANDOFF_SELF = "handoff_self"         # giver AND receiver are the same person wearing two hats
 
 # Priority seeds (floats; the Planner re-ranks gap + cross threads together, highest first).
 # Cross-persona threads lead a brief: a contradiction or an unverified handoff matters more than a
@@ -124,9 +126,11 @@ class CrossPersonaEngine:
         snap = load_snapshot(self._g)
         result = CorroborationResult()
 
-        # Node promotion: ≥2 distinct personas and not conflicting.
+        # Node promotion: ≥2 distinct personas and not conflicting. The seeded-role registry is
+        # excluded for the same reason ingest excludes it (P15a): it is vocabulary, not a witness,
+        # and if the two passes disagreed the batch tier would promote what merge just refused.
         for nid, card in snap.nodes.items():
-            personas = {p.said_by for p in card.provenance}
+            personas = {p.said_by for p in card.provenance} - {REGISTRY_SAID_BY}
             conflicting = any(p.status is ConfidenceStatus.CONFLICTING for p in card.provenance)
             if len(personas) >= 2 and not conflicting:
                 fresh = self._g.get_node(nid)
@@ -215,8 +219,30 @@ class CrossPersonaEngine:
                     other_role_id=role_id,
                     other_role_name=recv_name,
                 )
+                # P15a §4.5 — multi-hat people hand work to themselves. When the persona receiving
+                # this thread also owns the GIVING role, the standard copy tells them a stranger
+                # handed it over, which reads as a bug and invites a "that's me" non-answer. The
+                # question is still worth asking (the switch is where dual-hat work really leaks),
+                # so route a differently-worded twin instead of suppressing it.
+                giver_personas = (
+                    self._role_owner_personas(giver_role_id, snap) if giver_role_id else set()
+                )
+                self_thread = replace(
+                    thread,
+                    id=f"thread.{KIND_HANDOFF_SELF}.{act_id}.{role_id}",
+                    kind=KIND_HANDOFF_SELF,
+                    goal=(
+                        f"Describe what happens to '{act_name}' when you switch from your {giver} "
+                        f"hat to your {recv_name} hat."
+                    ),
+                    why=(
+                        f"You hold both {giver} and {recv_name}, so this handoff happens "
+                        "inside one person — the step most likely to be tacit and undocumented."
+                    ),
+                )
                 for persona in sorted(self._role_owner_personas(role_id, snap)):
-                    routed.append(RoutedThread(persona, thread))
+                    dual_hat = persona in giver_personas
+                    routed.append(RoutedThread(persona, self_thread if dual_hat else thread))
             else:  # route_discoverer — receiver not interviewed yet; keep with the source persona
                 thread = OpenThread(
                     id=f"thread.{KIND_HANDOFF_TRACE}.{act_id}.{role_id}",

@@ -59,6 +59,50 @@ The persona-scoped memory view + **ranked open threads**. **Guidance, not a scri
 may reword and deviate. Each thread: `goal`, `why`, `priority`, `suggested_opener`, conditional
 `followups`. On `cold_start: true` (empty brain) there are **no threads** — only generic openers.
 
+## 7. Role registry — `contracts/roles.json` (P15a)
+
+The engagement's **10 canonical roles** plus the conversational synonyms people actually say. Pattern
+for every entry: **the full title is canonical, the abbreviation people say is an alias** — so the
+deliverable reads formally and the conversation still matches.
+
+```json
+{ "slug": "role.delivery-specialist", "canonical_name": "Delivery Specialist",
+  "aliases": ["Project Manager", "PM", "DS", "Delivery Manager"] }
+```
+
+**Three consumers, one source:**
+
+| Consumer | How it reads the registry | Closed or open? |
+|---|---|---|
+| PWA onboarding chips | `pwa/src/sync/roles.ts` (committed mirror; `roles.test.ts` fails on drift) | **Closed** — you may only pick from the list |
+| `cli seed-roles` | `brain/.../roles.py` → 10 `Role` nodes with `aliases` pre-loaded | — |
+| Extractor prompt | a `KNOWN ROLES` block injected per call | **Open** — a preference, never a limit |
+
+**Why the aliases are load-bearing.** `find_by_alias` is an **exact, case-insensitive whole-string
+match** and the default embedder is a lexical hashing fallback. Without the alias table *"the PM
+signs that off"* mints a rival `Project Manager` node with no owner, so the handoff routes back to
+whoever mentioned them as *"who would know?"* forever, and the real Delivery Specialist is never
+asked. See ADR #33 and `brain/tests/test_roles.py`.
+
+**Two hard rules this contract carries:**
+
+1. **Aliases must be unique across roles**, and must not collide with another role's canonical name.
+   A duplicate alias silently **merges two real roles into one node** — the only failure mode the
+   table itself can cause. Enforced by tests on both planes. (`"QA"` and `"QA Head"` are safe
+   precisely because matching is whole-string.)
+2. **`seed-roles` must run BEFORE the first `run-round`.** Answers ingested first mint role nodes
+   under whatever name the extractor chose, and the aliases arrive too late to prevent the fork.
+
+**Multi-role identity.** `Participant.role_titles: string[]` is the truth; `role_title` is the
+**derived** `" / "`-joined mirror kept so every P13-era reader (the Drive `profile.json`, the
+per-folder `README.md`, `lifecycle.py`, `cli list-participants`) works untouched. The participant id
+is minted from the **first** role only and never moves when a hat is added or dropped (ADR #29) — the
+id is a durable label, `role_titles` is the truth about what someone does.
+
+**Stages are deliberately NOT a contract.** Roles are governed because the engagement knows them;
+lifecycle stages are **discovered per organisation**, because a predefined stage list is the
+day-anchored assumption in a new costume (ADR #33).
+
 ## Versioning
 
 Each schema carries a `schema_version` (start `1.0.0`). Backward-incompatible changes bump major;

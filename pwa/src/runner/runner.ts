@@ -20,6 +20,7 @@ import {
   identityAnswer,
   IDENTITY_QUESTION,
   isLiveDecision,
+  rolePhrase,
   SYSTEM_PROMPT,
 } from "./prompts";
 import { Session } from "./session";
@@ -113,7 +114,7 @@ export class Runner {
     if (!this.identity) return opener;
     const who = firstName(this.identity);
     return cold
-      ? `Hi ${who} — you're the ${this.identity.role_title}. ${opener}`
+      ? `Hi ${who} — you're the ${rolePhrase(this.identity)}. ${opener}`
       : `Welcome back, ${who}. ${opener}`;
   }
 

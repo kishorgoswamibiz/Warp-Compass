@@ -4,9 +4,10 @@
  * P8 minted an anonymous `p_<uuid>` on first launch: stable, but unreadable everywhere it landed —
  * the Drive folder name, the graph's provenance `said_by`, the deliverable's source lines. P13
  * replaces it with an identity the person **declares once**: a typed name + role, from which we mint
- * a readable, filesystem-safe id.
+ * a readable, filesystem-safe id. P15a makes the role **multi-valued** (`role_titles`), because one
+ * person commonly holds several — the id still comes from the first one and never moves.
  *
- *     Rahul Mehta · Business Analyst  →  rahul-mehta-business-analyst-3c1f
+ *     Rahul Mehta · Business Analysis Specialist  →  rahul-mehta-business-analysis-s-3c1f
  *
  * The id is minted ONCE and is **immutable thereafter** — it is stamped permanently into graph
  * provenance, so a later correction to the person's name updates `display_name` only, never the id
@@ -23,7 +24,20 @@ export interface Participant {
   persona_id: string;
   /** How the person wrote their name. Display only — never part of the id after minting. */
   display_name: string;
-  /** How the person described their role. Seeds the graph's Role node (P13 §4.1). */
+  /**
+   * Every role this person holds, chosen from `ROLE_REGISTRY` (P15a). **The canonical field.**
+   * Always ≥1 entry. Multi-valued because real people wear several hats — a Delivery Specialist who
+   * also does sales gets both, and the graph gets a Role node for each (P15 §4.5).
+   */
+  role_titles: string[];
+  /**
+   * `role_titles` joined with " / ", e.g. `"Delivery Specialist / Account Management Specialist"`.
+   *
+   * **Derived, never authored.** It exists so every P13-era consumer keeps working untouched — the
+   * whoami line, the Drive `profile.json`, the per-folder README, `cli list-participants`. The
+   * separator matches what the graph already contained before P15 ("Delivery Specialist / Project
+   * Manager"), so nothing downstream has to learn a new shape.
+   */
   role_title: string;
   /** ISO-8601 stamp of when onboarding completed. */
   onboarded_at: string;
@@ -44,6 +58,14 @@ export interface StorageLike {
 }
 
 const KEY = "wc.participant";
+
+/** How `role_titles` collapses into the legacy single-string `role_title`. */
+const ROLE_JOIN = " / ";
+
+/** Trim, drop blanks, drop duplicates — the shape `role_titles` is always stored in. */
+function normalizeRoles(roles: readonly string[]): string[] {
+  return [...new Set(roles.map((r) => r.trim()).filter(Boolean))];
+}
 
 /** Per-part slug budget. Keeps a full id under ~55 chars → Windows MAX_PATH headroom for
  *  `%BUS_ROOT%\participants\<id>\answer_logs\s_….json`. */
@@ -97,6 +119,10 @@ export function slugPart(text: string, max: number = MAX_PART): string {
  * Mint the permanent participant id from a declared name + role. The 4-hex suffix keeps two people
  * with the same name and role apart. Unslugabble input (emoji-only, blank) falls back to
  * `user-<8 hex>` so onboarding can never dead-end.
+ *
+ * With several roles (P15a) only the **first** is used, deliberately: the id is immutable once minted
+ * (ADR #29) because it is stamped into graph provenance, so it must not move when someone adds or
+ * drops a hat. The id is a durable *label*; `role_titles` is the truth about what they do.
  */
 export function mintParticipantId(name: string, role: string): string {
   const parts = [slugPart(name), slugPart(role)].filter(Boolean);
@@ -120,19 +146,27 @@ function readRaw(storage: StorageLike): Partial<Participant> | null {
 /**
  * The onboarded participant, or `null` when this device hasn't been onboarded yet.
  *
- * A pre-P13 record (a `p_<uuid>` with no `role_title`) counts as **not** onboarded: the card shows
+ * A pre-P13 record (a `p_<uuid>` with no role at all) counts as **not** onboarded: the card shows
  * once and a new readable id is minted. The old UUID folder is abandoned rather than migrated —
  * migrating would mean rewriting provenance, which the immutability rule forbids.
+ *
+ * A **P13-era record** (single `role_title`, no `role_titles`) is a different case and IS onboarded:
+ * it is read forward by splitting the joined string, so shipping P15a never re-onboards a device that
+ * already has an identity — that would mint a second id for the same person and orphan their facts.
  */
 export function getParticipant(storage: StorageLike = defaultStorage()): Participant | null {
   const p = readRaw(storage);
   if (!p?.participant_id || !p.persona_id) return null;
-  if (!p.role_title) return null; // legacy P8 record
+  const roles = normalizeRoles(
+    p.role_titles?.length ? p.role_titles : (p.role_title ?? "").split(ROLE_JOIN),
+  );
+  if (roles.length === 0) return null; // legacy P8 record — no role was ever declared
   return {
     participant_id: p.participant_id,
     persona_id: p.persona_id,
     display_name: p.display_name ?? "",
-    role_title: p.role_title,
+    role_titles: roles,
+    role_title: roles.join(ROLE_JOIN),
     onboarded_at: p.onboarded_at ?? "",
     ...(p.identity_seeded_at ? { identity_seeded_at: p.identity_seeded_at } : {}),
     ...(p.previous_id ? { previous_id: p.previous_id } : {}),
@@ -156,20 +190,26 @@ export function requireParticipant(storage: StorageLike = defaultStorage()): Par
 
 // ── write ─────────────────────────────────────────────────────────────────────
 
-/** Complete onboarding: mint the permanent id and persist the identity. Overwrites any legacy record. */
+/**
+ * Complete onboarding: mint the permanent id and persist the identity. Overwrites any legacy record.
+ *
+ * `roles` is the multi-select from the onboarding card (P15a); `role` remains accepted as a
+ * single-value shorthand so existing call sites and tests keep compiling.
+ */
 export function createParticipant(
-  input: { name: string; role: string; now?: string },
+  input: { name: string; role?: string; roles?: readonly string[]; now?: string },
   storage: StorageLike = defaultStorage(),
 ): Participant {
   const display_name = input.name.trim();
-  const role_title = input.role.trim();
+  const role_titles = normalizeRoles(input.roles ?? (input.role ? [input.role] : []));
   const previous = readRaw(storage)?.participant_id;
-  const id = mintParticipantId(display_name, role_title);
+  const id = mintParticipantId(display_name, role_titles[0] ?? "");
   const p: Participant = {
     participant_id: id,
     persona_id: id, // prototype: persona 1:1 with participant (ADR #17)
     display_name,
-    role_title,
+    role_titles,
+    role_title: role_titles.join(ROLE_JOIN),
     onboarded_at: input.now ?? new Date().toISOString(),
     ...(previous ? { previous_id: previous } : {}),
   };
@@ -178,18 +218,22 @@ export function createParticipant(
 }
 
 /**
- * Correct the display name and/or role after onboarding. **Never touches the id** — it is already
- * stamped into graph provenance and Drive folder names (ADR #29).
+ * Correct the display name and/or roles after onboarding — including picking up a second hat.
+ * **Never touches the id** — it is already stamped into graph provenance and Drive folder names
+ * (ADR #29), so adding a role changes what we know about the person, not who they are.
  */
 export function updateIdentity(
-  changes: { name?: string; role?: string },
+  changes: { name?: string; role?: string; roles?: readonly string[] },
   storage: StorageLike = defaultStorage(),
 ): Participant {
   const p = requireParticipant(storage);
+  const incoming = normalizeRoles(changes.roles ?? (changes.role ? [changes.role] : []));
+  const role_titles = incoming.length ? incoming : p.role_titles;
   const next: Participant = {
     ...p,
     display_name: changes.name?.trim() || p.display_name,
-    role_title: changes.role?.trim() || p.role_title,
+    role_titles,
+    role_title: role_titles.join(ROLE_JOIN),
   };
   storage.setItem(KEY, JSON.stringify(next));
   return next;

@@ -129,6 +129,12 @@ function writeProfile_(pdir, pid, incoming) {
   // is immutable (ADR #29) and is never touched here.
   if (incoming.display_name) profile.display_name = String(incoming.display_name);
   if (incoming.role_title) profile.role_title = String(incoming.role_title);
+  // P15a: one person can hold several roles. `role_titles` is the truth; `role_title` above stays as
+  // the " / "-joined mirror so `lifecycle.py` and the README keep working with no change.
+  if (incoming.role_titles && incoming.role_titles.length) {
+    profile.role_titles = incoming.role_titles.map(String);
+    if (!incoming.role_title) profile.role_title = profile.role_titles.join(" / ");
+  }
   profile.last_seen = new Date().toISOString();
 
   var content = JSON.stringify(profile, null, 2);
@@ -150,7 +156,11 @@ function writeReadme_(pdir, profile) {
       "",
       "| | |",
       "|---|---|",
-      "| **Role** | " + (profile.role_title || "_not declared_") + " |",
+      "| **Role(s)** | " +
+        ((profile.role_titles && profile.role_titles.length
+          ? profile.role_titles.join(", ")
+          : profile.role_title) || "_not declared_") +
+        " |",
       "| **Participant id** | `" + profile.participant_id + "` |",
       "| **First seen** | " + shortDate_(profile.created_at) + " |",
       "| **Last seen** | " + shortDate_(profile.last_seen) + " |",

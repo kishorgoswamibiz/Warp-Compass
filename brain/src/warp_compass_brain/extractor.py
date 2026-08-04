@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from .llm.base import LLMError, LLMProvider
 from .models import CandidateNode, CandidateRelation, ExtractionResult
 from .ontology import Ontology, load_ontology
+from .roles import RoleRegistry, load_roles
 
 _SYSTEM = """You are a knowledge extractor for a business-process discovery system.
 Given one interview answer and the list of ALLOWED node types and edge types, output ONLY JSON.
@@ -66,9 +67,15 @@ def has_extractable_content(answer: str) -> bool:
 
 
 class Extractor:
-    def __init__(self, llm: LLMProvider, ontology: Ontology | None = None) -> None:
+    def __init__(
+        self,
+        llm: LLMProvider,
+        ontology: Ontology | None = None,
+        roles: RoleRegistry | None = None,
+    ) -> None:
         self._llm = llm
         self._ont = ontology or load_ontology()
+        self._roles = roles or load_roles()
 
     def _user_prompt(self, answer: str) -> str:
         node_types = ", ".join(sorted(self._ont.node_types))
@@ -80,8 +87,32 @@ class Extractor:
         return (
             f"ALLOWED NODE TYPES: {node_types}\n"
             f"ALLOWED EDGE TYPES (direction):\n{edges}\n"
-            f"ALLOWED CATEGORY CODES: {codes}\n\n"
+            f"ALLOWED CATEGORY CODES: {codes}\n"
+            f"{self._known_roles_block()}\n"
             f"ANSWER:\n\"\"\"\n{answer}\n\"\"\""
+        )
+
+    def _known_roles_block(self) -> str:
+        """The registry's canonical role names, so "the PM" is emitted as "Delivery Specialist".
+
+        Fixes role forking at the SOURCE rather than repairing it at resolve time (P15a). Note the
+        wording: **prefer** these names, not "only these exist". Real interviews name roles nobody
+        self-declares as — ``End Client``, ``Resource Manager`` — and closing this list would delete
+        the client from the process map. Unlike node/edge types, the role list is open.
+        """
+        lines = [
+            f"  {r.canonical_name}  (also said as: {', '.join(r.aliases)})"
+            if r.aliases
+            else f"  {r.canonical_name}"
+            for r in self._roles.roles
+        ]
+        return (
+            "KNOWN ROLES — when the answer refers to one of these, emit it under the EXACT\n"
+            "canonical name on the left, so every mention lands on one node. Roles NOT on this\n"
+            "list are still allowed and expected (e.g. an external client) — this list is a\n"
+            "preference, not a limit.\n"
+            + "\n".join(lines)
+            + "\n"
         )
 
     def extract(self, answer: str) -> ExtractionResult:

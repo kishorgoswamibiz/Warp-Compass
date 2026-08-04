@@ -38,6 +38,7 @@ from .completeness import CompletenessEngine, GapKind, load_snapshot
 from .crosspersona import (
     KIND_CROSS_CONFLICT,
     KIND_HANDOFF_CONFIRM,
+    KIND_HANDOFF_SELF,
     KIND_HANDOFF_TRACE,
     CrossPersonaEngine,
 )
@@ -380,6 +381,14 @@ def _opener_and_followups(t: OpenThread) -> tuple[str, list[dict[str, str]]]:
                     "ask": "What state is it in when it reaches you — anything missing or redone?",
                 }
             ],
+        )
+    if t.kind == KIND_HANDOFF_SELF:  # one person wearing both hats (P15a §4.5)
+        giver = t.role_name or "your other role"
+        recv = t.other_role_name or "your other role"
+        return (
+            f"You wear both hats here — when you switch from your {giver} hat to your {recv} hat, "
+            f"what do you do with '{name}'?",
+            [{"if": "they describe it", "ask": "Does anything get dropped or redone in it?"}],
         )
     if t.kind == KIND_HANDOFF_TRACE:  # receiver not interviewed yet; stays with the discoverer
         other = t.other_role_name or "the other team"

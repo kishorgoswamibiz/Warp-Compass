@@ -18,6 +18,8 @@ interface PushBody {
   persona_id?: string;
   display_name?: string;
   role_title?: string;
+  /** P15a: the declared roles. `role_title` is the joined mirror, kept for older readers. */
+  role_titles?: string[];
   answer_log?: { session_id?: string };
 }
 
@@ -65,6 +67,7 @@ export async function handleSyncPush(req: Request, env: Env): Promise<Response> 
       persona_id: body.persona_id,
       display_name: body.display_name,
       role_title: body.role_title, // P13: declared identity, used for profile.json + README.md
+      role_titles: body.role_titles, // P15a: the same identity, unjoined
     },
     answer_log: body.answer_log,
   };

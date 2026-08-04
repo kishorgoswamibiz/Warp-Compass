@@ -11,6 +11,7 @@ from conftest import FakeGraphStore
 from warp_compass_brain.crosspersona import (
     KIND_CROSS_CONFLICT,
     KIND_HANDOFF_CONFIRM,
+    KIND_HANDOFF_SELF,
     KIND_HANDOFF_TRACE,
     CrossPersonaEngine,
 )
@@ -23,6 +24,7 @@ from warp_compass_brain.models import (
     Provenance,
 )
 from warp_compass_brain.ontology import load_ontology
+from warp_compass_brain.planner import _opener_and_followups
 
 ONT = load_ontology()
 TS = "2026-06-29T10:00:00Z"
@@ -187,3 +189,77 @@ def test_conflicting_node_is_not_promoted():
     g.upsert_node(card)
     result = _engine(g).corroborate()
     assert result.promoted_nodes == []
+
+
+# --- P15a §4.5: a multi-hat person hands work to themselves ------------------------------------
+
+
+def _dual_hat_graph():
+    """One persona holding two roles, handing work from the first hat to the second.
+
+    Delivery Specialist closes a project and hands it to Account Management — and the same human
+    is both. The receiving role is "active" (its activity carries this persona's provenance), so
+    ``_handoff_state`` returns ``route_receiver``; without the P15a branch the persona would be
+    told a stranger handed it to them.
+    """
+    g = FakeGraphStore()
+    g.upsert_node(_node("role.ds", NodeType.ROLE, "Delivery Specialist", personas="persona.A"))
+    g.upsert_node(
+        _node("role.ams", NodeType.ROLE, "Account Management Specialist", personas="persona.A")
+    )
+    g.upsert_node(_node("act.close", NodeType.ACTIVITY, "Close the project", personas="persona.A"))
+    g.upsert_node(_node("act.renew", NodeType.ACTIVITY, "Chase the renewal", personas="persona.A"))
+    g.upsert_node(_node("art.signoff", NodeType.ARTIFACT, "Sign-off note", personas="persona.A"))
+    g.add_edge(_edge(EdgeType.PERFORMS, "role.ds", "act.close"))
+    g.add_edge(_edge(EdgeType.PERFORMS, "role.ams", "act.renew"))
+    g.add_edge(_edge(EdgeType.PRODUCES, "act.close", "art.signoff"))
+    g.add_edge(_edge(EdgeType.HANDS_OFF_TO, "act.close", "role.ams"))
+    return g
+
+
+def test_self_handoff_is_routed_as_a_hat_switch_not_a_stranger():
+    report = _engine(_dual_hat_graph()).assess()
+    assert [h.state for h in report.handoffs] == ["route_receiver"]
+
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.close"]
+    assert {rt.persona_id for rt in routed} == {"persona.A"}
+    # The dual-hat twin replaces the standard confirm thread rather than adding to it.
+    assert [rt.thread.kind for rt in routed] == [KIND_HANDOFF_SELF]
+    thread = routed[0].thread
+    assert "Delivery Specialist" in thread.goal and "Account Management Specialist" in thread.goal
+    # Both role names survive so the Planner can name each hat.
+    assert (thread.role_name, thread.other_role_name) == (
+        "Delivery Specialist",
+        "Account Management Specialist",
+    )
+
+
+def test_self_handoff_copy_never_says_another_team():
+    """The regression the copy branch exists for (plan §11)."""
+    report = _engine(_dual_hat_graph()).assess()
+    thread = next(rt.thread for rt in report.routed if rt.thread.kind == KIND_HANDOFF_SELF)
+
+    opener, followups = _opener_and_followups(thread)
+    assert "another team" not in opener.lower()
+    assert "another role" not in opener.lower()
+    assert "hat" in opener.lower()
+    assert "Close the project" in opener
+    assert followups  # still probes for what leaks in the switch
+
+
+def test_a_genuine_second_person_still_gets_the_stranger_copy():
+    """The branch must not swallow real cross-person handoffs — only same-persona ones."""
+    g = _dual_hat_graph()
+    # A different human owns Account Management: their interview produced the receiving activity.
+    card = g.get_node("act.renew")
+    card.provenance = [_prov("persona.B")]
+    g.upsert_node(card)
+
+    report = _engine(g).assess()
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.close"]
+    assert [(rt.persona_id, rt.thread.kind) for rt in routed] == [
+        ("persona.B", KIND_HANDOFF_CONFIRM)
+    ]
+    opener, _ = _opener_and_followups(routed[0].thread)
+    assert "your delivery specialist hat" not in opener.lower()
+    assert "Delivery Specialist hands" in opener  # named as someone else, which they are

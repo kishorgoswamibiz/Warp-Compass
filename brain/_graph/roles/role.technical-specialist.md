@@ -1,13 +1,13 @@
 ---
 type: Role
-id: role.delivery-specialist
-title: Delivery Specialist
+id: role.technical-specialist
+title: Technical Specialist
 keywords:
-- Project Manager
-- PM
-- DS
-- Delivery Manager
-description: Delivery Specialist — a role in this organisation. Seeded from the engagement's role registry
+- Developer
+- Dev
+- TS
+- Engineer
+description: Technical Specialist — a role in this organisation. Seeded from the engagement's role registry
   so that every way people refer to it resolves onto one node; its responsibilities are filled in as people
   describe their work.
 status: unverified
@@ -24,11 +24,11 @@ edges: []
 timestamp: '2026-08-04T04:30:08.909539+00:00'
 ---
 
-# Delivery Specialist
+# Technical Specialist
 
-> **Role** `role.delivery-specialist` · status **unverified** · keywords: Project Manager, PM, DS, Delivery Manager
+> **Role** `role.technical-specialist` · status **unverified** · keywords: Developer, Dev, TS, Engineer
 
-Delivery Specialist — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
+Technical Specialist — a role in this organisation. Seeded from the engagement's role registry so that every way people refer to it resolves onto one node; its responsibilities are filled in as people describe their work.
 
 ## Facts
 - 2026-08-04 — registry (session seed.roles, confidence 1, unverified)

@@ -17,6 +17,8 @@ export {
   updateIdentity,
 } from "./participant";
 export type { Participant, StorageLike } from "./participant";
+export { ROLE_NAMES, ROLE_REGISTRY, joinRoles } from "./roles";
+export type { RoleEntry } from "./roles";
 export { answerLogFilename, downloadAnswerLog, parseBriefFile } from "./bus";
 export { pushAnswerLog, pullLatestBrief } from "./remote";
 export type { PushResult } from "./remote";

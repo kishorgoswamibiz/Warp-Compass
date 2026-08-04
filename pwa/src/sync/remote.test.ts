@@ -12,7 +12,9 @@ const participant: Participant = {
   participant_id: "p_abc",
   persona_id: "p_abc",
   display_name: "Asha",
-  role_title: "Sales Rep",
+  // P15a: two hats, so this also covers the joined mirror going up alongside the array.
+  role_titles: ["Account Management Specialist", "Delivery Specialist"],
+  role_title: "Account Management Specialist / Delivery Specialist",
   onboarded_at: "2026-07-28T09:00:00.000Z",
 };
 const log = { session_id: "s_1", persona_id: "p_abc", entries: [] } as unknown as AnswerLog;
@@ -40,7 +42,10 @@ describe("pushAnswerLog", () => {
     expect(sent.answer_log.session_id).toBe("s_1");
     // P13: the declared identity rides along so Drive can name the folder and its README.
     expect(sent.display_name).toBe("Asha");
-    expect(sent.role_title).toBe("Sales Rep");
+    // P15a: BOTH shapes go up — the array is the truth, the joined string keeps a not-yet-redeployed
+    // Apps Script (and `lifecycle.py`) working unchanged.
+    expect(sent.role_titles).toEqual(["Account Management Specialist", "Delivery Specialist"]);
+    expect(sent.role_title).toBe("Account Management Specialist / Delivery Specialist");
   });
 
   it("treats an already-existing log (write-once) as success with written:false", async () => {

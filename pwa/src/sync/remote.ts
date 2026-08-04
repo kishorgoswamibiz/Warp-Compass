@@ -32,7 +32,11 @@ export async function pushAnswerLog(log: AnswerLog, participant: Participant): P
       // Declared at onboarding (P13). Apps Script merges these into profile.json and renders the
       // folder's README.md, which is what makes the Drive tree readable.
       display_name: participant.display_name,
+      // Both shapes on purpose (P15a): `role_titles` is the truth, `role_title` is the joined string
+      // every P13-era reader already understands — including an Apps Script deployment that has not
+      // been updated yet, which is the situation today (PROGRESS Blockers).
       role_title: participant.role_title,
+      role_titles: participant.role_titles,
       answer_log: log,
     }),
   });

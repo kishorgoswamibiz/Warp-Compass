@@ -234,6 +234,66 @@ describe("declared identity (P13)", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P15a — one person, several roles.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const dualHatted = {
+  display_name: "Rahul Mehta",
+  role_title: "Delivery Specialist / Account Management Specialist",
+  role_titles: ["Delivery Specialist", "Account Management Specialist"],
+};
+
+describe("multi-role identity (P15a)", () => {
+  it("greets someone wearing two hats as a person would, not with a slash", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, {
+      identity: dualHatted,
+    });
+    const opener = runner.start();
+    expect(opener).toContain(
+      "you're the Delivery Specialist and Account Management Specialist",
+    );
+    expect(opener).not.toContain("/");
+  });
+
+  it("names every role in the per-turn WHO block, so neither hat is forgotten", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "opener", utterance: "And then?" }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock, { identity: dualHatted });
+    runner.start();
+    await runner.respond("I run delivery, and I also handle two accounts.");
+
+    const prompt = llm.calls[0].user;
+    expect(prompt).toContain("Delivery Specialist and Account Management Specialist");
+    expect(prompt).toContain("Do NOT ask for their name or role");
+  });
+
+  it("seeds BOTH roles into the log, which is what mints two Role nodes", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "opener", utterance: "What comes first?" }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock, {
+      identity: dualHatted,
+      seedIdentity: true,
+    });
+    runner.start();
+    await runner.respond("A lead lands from marketing.");
+
+    const seed = runner.log.build().entries[0];
+    expect(seed.raw_answer).toBe(
+      "I'm Rahul Mehta, I'm the Delivery Specialist and Account Management Specialist.",
+    );
+  });
+
+  it("reads a P13-era identity (joined string, no array) forward", () => {
+    const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, {
+      identity: { display_name: "Ajay", role_title: "Delivery Specialist / Project Manager" },
+    });
+    expect(runner.start()).toContain("you're the Delivery Specialist and Project Manager");
+  });
+});
+
 describe("identity seed entry (P13 §4.1)", () => {
   it("becomes the log's FIRST entry and still validates against the contract", async () => {
     const llm = new FakeLLMProvider([

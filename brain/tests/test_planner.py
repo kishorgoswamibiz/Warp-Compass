@@ -4,6 +4,8 @@ and contract validation against contracts/session-brief.schema.json (no Neo4j, n
 from __future__ import annotations
 
 import json
+import pathlib
+import re
 from pathlib import Path
 
 from conftest import FakeGraphStore
@@ -161,10 +163,13 @@ def test_brief_is_scoped_to_the_personas_own_subgraph():
     _bare_activity(g, "act.b", "B's activity", persona="persona.B", role_id="role.b")
 
     brief_a = _planner(g).plan("persona.A", session_id="s")
-    # thread ids embed their node id; A's brief must reference only A's node
+    # Thread ids embed their node id; A's brief must reference only nodes A contributed to. Since
+    # P15b that includes A's own Role node (its `reports_to` is now scored, which is what makes the
+    # org chart get asked about at all) — but never anything of B's.
     ids = [t.id for t in brief_a.open_threads]
-    assert ids and all("act.a" in tid for tid in ids)
-    assert not any("act.b" in tid for tid in ids), "A's brief leaked B's nodes"
+    assert ids and all(("act.a" in tid or "role.a" in tid) for tid in ids), ids
+    assert any("role.a" in tid for tid in ids), "the org chart is never asked about"
+    assert not any("act.b" in tid or "role.b" in tid for tid in ids), "A's brief leaked B's nodes"
 
     # plan_all yields one brief per contributing persona
     assert {b.persona_id for b in _planner(g).plan_all(session_id="s")} == {
@@ -264,3 +269,96 @@ def test_no_retirements_means_no_orphan_threads_at_all():
     assert not [t for t in brief.open_threads if t.id.startswith("orphan.")]
     # persona.B's gaps stay persona.B's problem — unchanged pre-P13 behaviour.
     assert all("Pack order" not in (t.suggested_opener or "") for t in brief.open_threads)
+
+
+# --- P15b: the interview is lifecycle-anchored, and the two prompt copies must not drift --------
+
+_PROMPTS_TS = (
+    pathlib.Path(__file__).resolve().parents[2] / "pwa" / "src" / "runner" / "prompts.ts"
+)
+
+
+def test_no_cold_start_opener_mentions_a_day():
+    """The whole point of P15b. Guarded because the wording drifted back once already (P12→P15)."""
+    for opener in COLD_START_OPENERS:
+        low = opener.lower()
+        assert not re.search(r"\bday\b", low), opener
+        assert not re.search(r"\bdaily\b", low), opener
+        assert not re.search(r"\bmorning\b", low), opener
+
+
+def test_openers_ask_about_the_journey_and_the_cadence():
+    joined = " ".join(COLD_START_OPENERS).lower()
+    assert "one piece of work" in joined, "Pass A must ask for the lifecycle map"
+    assert "on every project" in joined, "cadence must be asked (Finding 5)"
+
+
+def test_the_identity_opener_is_still_index_zero():
+    """P13's never-re-ask guarantee depends on this position, not on the text."""
+    assert "tell me about your role" in COLD_START_OPENERS[0].lower()
+
+
+def test_cold_start_openers_match_the_pwa_copy_verbatim():
+    """The cross-language duplicate in `prompts.ts` (PROMPTS.md §2) must stay identical.
+
+    Both planes need the same generic openers and there is no shared TS/Py module (ADR #18d), so the
+    constant is duplicated by design — which means it needs a test that fails loudly on drift, the
+    same discipline `contracts/roles.json` uses for the role registry.
+    """
+    src = _PROMPTS_TS.read_text(encoding="utf-8")
+    block = re.search(
+        r"export const COLD_START_OPENERS: readonly string\[\] = \[(.*?)\n\];", src, re.S
+    )
+    assert block, "could not find COLD_START_OPENERS in prompts.ts"
+    ts_openers = re.findall(r'^\s*"((?:[^"\\]|\\.)*)",\s*$', block.group(1), re.M)
+    ts_openers = [o.replace('\\"', '"') for o in ts_openers]
+    assert ts_openers == COLD_START_OPENERS, (
+        "prompts.ts and planner.py have drifted apart:\n"
+        f"  ts : {ts_openers}\n"
+        f"  py : {COLD_START_OPENERS}"
+    )
+
+
+def test_every_scored_completeness_field_has_an_opener():
+    """A gap with no opener falls back to the raw `goal` string, which reads like a form field.
+
+    Covers the P15b additions (cadence, and the Stage/Role/Objective fields) as well as the
+    original Activity ones.
+    """
+    from warp_compass_brain.models import NodeType
+    from warp_compass_brain.planner import _FIELD_OPENERS
+
+    ont = load_ontology()
+    for ntype in (NodeType.ACTIVITY, NodeType.ROLE, NodeType.STAGE, NodeType.OBJECTIVE):
+        for f in ont.completeness_fields(ntype):
+            if f == "measured_by":
+                continue  # deliberately unmapped: no Objective->KPI edge exists (see completeness)
+            assert f in _FIELD_OPENERS, f"{ntype.value}.{f} has no opener"
+            assert "{name}" in _FIELD_OPENERS[f], f"{f} opener does not name the node"
+
+
+def test_stage_gaps_produce_spoken_openers_not_field_names():
+    g = FakeGraphStore()
+    g.upsert_node(
+        NodeCard(
+            id="stg.discovery",
+            type=NodeType.STAGE,
+            canonical_name="Discovery",
+            description="Working out what the client actually needs.",
+            category_codes=["00"],
+            provenance=[
+                Provenance(
+                    said_by="persona.A",
+                    session_id="s1",
+                    confidence=0.9,
+                    status=ConfidenceStatus.UNVERIFIED,
+                    ts="2026-08-04T10:00:00Z",
+                )
+            ],
+        )
+    )
+    brief = _planner(g).plan("persona.A", session_id="s")
+    openers = {t.suggested_opener for t in brief.open_threads}
+    assert "What actually happens during 'Discovery'? Walk me through it in order." in openers
+    assert "How do you know 'Discovery' is done and it's safe to move on?" in openers
+    assert any("accountable for 'Discovery'" in o for o in openers)

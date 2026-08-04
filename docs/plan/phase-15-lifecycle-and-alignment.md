@@ -1,23 +1,34 @@
 # Phase 15 — Lifecycle-anchored interviewing, declared multi-role identity, and the alignment diagnostic
 
-> **Status:** **P15a SHIPPED (04 Aug 2026) · P15b + P15c NOT STARTED.** Written 03 Aug 2026 from the
+> **Status:** **P15a + P15b SHIPPED (04 Aug 2026) · P15c NOT STARTED.** Written 03 Aug 2026 from the
 > owner's design ruling in session `opus-p15`. Supersedes the P12 "map your day" interview framing.
 >
 > **Read §1 before anything else.** Several items in this plan were *rejected* by the owner during
 > design and are recorded in §1.2 so a later agent doesn't helpfully re-add them.
 >
-> **What is done (§4, §9):** the role registry, multi-select onboarding, `cli seed-roles` (run live —
-> the §9 order-critical step is closed), the extractor's `KNOWN ROLES` block, the R3 corroboration
-> exclusion, and the §4.5 dual-hat copy branch. ADR #33 logged.
+> **Done — §4, §5, §6, §8, §9.** The role registry, multi-select onboarding, `cli seed-roles` (run
+> live — the §9 order-critical step is closed), the `KNOWN ROLES` block, the R3 corroboration
+> exclusion, the §4.5 dual-hat copy branch; then the full ontology diff, per-type completeness scoring
+> for Stage/Role/Objective, the stage-aware chain verdict, both prompt rewrites, the new field
+> openers, the probe budget, and `cli coverage`. ADR #33 logged; #31/#32 written and pending.
 >
-> **What is NOT done:** everything in **§5, §6, §7, §8** — so **the interview is still day-anchored**.
-> Two deviations from this plan, both deliberate and both improvements, recorded so nobody "finishes"
-> them: (a) §10's `lifecycle.py` change is **unnecessary** — `role_title` is now a derived `" / "`
-> mirror of `role_titles`, so every P13-era reader works untouched; (b) §4.3's claim that retrieval
-> "returns nothing relevant" without aliases is true of *relevance* but not of *emptiness* — the
-> lexical index still returns the single Role node as a weak neighbour, so the unseeded outcome depends
-> on the adjudicating model rather than being deterministic. `test_roles.py` asserts the honest version:
-> without aliases **no exact match protects the decision**.
+> **NOT done — §7 (P15c)**: derived altitude, `GapKind.MISALIGNMENT`, the structural findings, the
+> provenance description snapshot, and the docgen stage-spine + Gaps & Recommendations section.
+>
+> **Five deliberate deviations from this plan, all recorded so nobody "corrects" them back:**
+> 1. **§10's `lifecycle.py` change is unnecessary.** `role_title` is now a derived `" / "` mirror of
+>    `role_titles`, so every P13-era reader works untouched. Fewer readers to keep in sync.
+> 2. **§4.3 slightly overstates the unseeded failure.** Retrieval "returns nothing *relevant*" — but
+>    not nothing: the lexical index still returns the single Role node as a weak neighbour, so the
+>    outcome depends on the adjudicating model rather than being deterministic. `test_roles.py`
+>    asserts the honest version — without aliases **no exact match protects the decision**.
+> 3. **Registry-seeded roles are not scored for completeness at all** (not in the plan). Otherwise ten
+>    roles nobody has mentioned file 20 permanent gaps and `satisfied` can never be true again.
+> 4. **`Role.reports_to` gained an attribute escape hatch** (not in the plan), mirroring
+>    `next_handoff`'s endpoint exemption. Without it the org root's gap is unclosable — asked forever.
+> 5. **A lone stage does not count as "positioned"**, so it cannot launder the activities inside it
+>    out of the broken-chain check. §6.2 didn't specify this; without it the noise just moves up a
+>    level.
 
 ---
 

@@ -3,14 +3,20 @@ vibe (docs/02 §9, phase-03 brief).
 
 It does two things deterministically from the graph:
 
-* **Per-Activity coverage.** For each ``Activity`` it checks the ontology completeness fields
-  (trigger, inputs, system, output, next handoff, exceptions, governing rules). Every missing
-  field is a typed :class:`Gap`.
+* **Per-node coverage.** For each scored node type it checks the ontology completeness fields and
+  emits a typed :class:`Gap` per missing one: ``Activity`` (trigger, inputs, system, output, next
+  handoff, cadence, exceptions, governing rules), ``Role`` (reports_to, performs), ``Stage``
+  (position, activities, owner, exit_criteria) and ``Objective``. **Until P15b only Activities were
+  scored**, so ``Role.completeness_fields`` was declared in the contract and never measured — which
+  meant nothing ever drove the org chart to completion, and altitude could not be derived from
+  ``REPORTS_TO`` depth. A node whose only provenance is the seeded role registry is skipped: it is
+  vocabulary, not a claim about the business (ADR #33).
 * **Two scores.** A *per-persona* score (the fraction of a role's activities that are fully
-  described) and an *org-wide* score that folds together handoff coverage (every handoff
-  verified from both sides), conflict resolution (no node left ``conflicting``), and — a
-  first-class check — whether the **end-to-end chain is unbroken** (every step connects from a
-  first trigger to a final output, with no dangling handoffs).
+  described — deliberately still activities only, so the number keeps its meaning) and an
+  *org-wide* score that folds together handoff coverage (every handoff verified from both sides),
+  conflict resolution (no node left ``conflicting``), whether the **end-to-end chain is unbroken**
+  (every step connects from a first trigger to a final output, no dangling handoffs), and the
+  **lifecycle spine** (``stage_chain_connectivity`` — stages ordered by ``PRECEDES``).
 
 Gaps feed the thread generator (:mod:`warp_compass_brain.threads`), which the Planner (P4) turns
 into per-persona Session Briefs. The engine only *reads* the graph through :class:`GraphStore`;
@@ -32,6 +38,7 @@ from enum import StrEnum
 from .graphstore.base import GraphStore
 from .models import ConfidenceStatus, Edge, EdgeType, NodeCard, NodeType
 from .ontology import Ontology
+from .roles import REGISTRY_SAID_BY
 
 # --- field → graph-check mapping for an Activity ----------------------------------------------
 #
@@ -49,7 +56,46 @@ _ACTIVITY_EDGE_FIELDS: dict[str, tuple[EdgeType, str]] = {
     "next_handoff": (EdgeType.HANDS_OFF_TO, "out"),  # Activity -> Role
     "rules": (EdgeType.GOVERNED_BY, "out"),        # Activity -> Rule
 }
-_ACTIVITY_ATTR_FIELDS: frozenset[str] = frozenset({"exceptions"})
+# ``cadence`` is an attribute, not an edge: the expected values are free text distilled by the
+# extractor ("every project", "per opportunity", "only on escalation"). Deliberately not an enum —
+# inventing one would be the day-anchored assumption in a new costume (P15b, plan §5.3).
+_ACTIVITY_ATTR_FIELDS: frozenset[str] = frozenset({"exceptions", "cadence"})
+
+# --- the same mapping for the other scored types (P15b) ----------------------------------------
+#
+# Before P15b this engine scored **Activities only**, so ``Role.completeness_fields`` was declared
+# in the contract and never measured — meaning nothing in the system ever drove the org chart to
+# completion. Scoring ``Role.reports_to`` is what makes reporting lines get asked about, which is
+# what makes altitude derivable (plan §6.1, §6.3).
+
+_ROLE_EDGE_FIELDS: dict[str, tuple[EdgeType, str]] = {
+    "reports_to": (EdgeType.REPORTS_TO, "out"),    # Role -> Role
+    "performs": (EdgeType.PERFORMS, "out"),        # Role -> Activity
+}
+
+_STAGE_EDGE_FIELDS: dict[str, tuple[EdgeType, str]] = {
+    # "either": the first stage in a lifecycle has no predecessor and the last has no successor, so
+    # a PRECEDES edge in EITHER direction locates a stage in the order.
+    "position": (EdgeType.PRECEDES, "either"),     # Stage <-> Stage
+    "activities": (EdgeType.PART_OF, "in"),        # Activity -> Stage
+    "owner": (EdgeType.OWNS, "in"),                # Role -> Stage
+}
+_STAGE_ATTR_FIELDS: frozenset[str] = frozenset({"exit_criteria"})
+
+_OBJECTIVE_EDGE_FIELDS: dict[str, tuple[EdgeType, str]] = {
+    "owner_role": (EdgeType.PURSUES, "in"),        # Role -> Objective
+    "objective_for": (EdgeType.OBJECTIVE_FOR, "out"),  # Objective -> Stage
+    # ``measured_by`` is declared in the ontology but has no Objective->KPI edge type, so it falls
+    # through the "unmapped → unknowable, not missing" guard in ``_field_present``. Intentional:
+    # adding vocabulary must never be able to mark the whole graph incomplete.
+}
+
+_SCORED_TYPES: dict[NodeType, tuple[dict[str, tuple[EdgeType, str]], frozenset[str]]] = {
+    NodeType.ACTIVITY: (_ACTIVITY_EDGE_FIELDS, _ACTIVITY_ATTR_FIELDS),
+    NodeType.ROLE: (_ROLE_EDGE_FIELDS, frozenset()),
+    NodeType.STAGE: (_STAGE_EDGE_FIELDS, _STAGE_ATTR_FIELDS),
+    NodeType.OBJECTIVE: (_OBJECTIVE_EDGE_FIELDS, frozenset()),
+}
 
 
 class GapKind(StrEnum):
@@ -96,17 +142,28 @@ class PersonaScore:
 
 @dataclass
 class OrgScore:
-    """Org-wide completeness: handoffs both-sided, conflicts resolved, chain unbroken."""
+    """Org-wide completeness: handoffs both-sided, conflicts resolved, both chains unbroken."""
 
     handoff_coverage: float       # fraction of handoffs verified from both sides
     conflict_resolution: float    # fraction of nodes not left conflicting
     chain_connectivity: float     # fraction of activities on a trigger→output path
     chain_unbroken: bool
+    # P15b — the lifecycle spine, scored separately from the activity flow. Fraction of stages on a
+    # PRECEDES path from a first stage to a last one. 1.0 when no stages are known yet (vacuous),
+    # so this term can never drag the score down before the interview has discovered any.
+    stage_chain_connectivity: float = 1.0
 
     @property
     def score(self) -> float:
         return round(
-            (self.handoff_coverage + self.conflict_resolution + self.chain_connectivity) / 3, 4
+            (
+                self.handoff_coverage
+                + self.conflict_resolution
+                + self.chain_connectivity
+                + self.stage_chain_connectivity
+            )
+            / 4,
+            4,
         )
 
 
@@ -208,7 +265,17 @@ class CompletenessEngine:
         # 1) Per-activity field coverage.
         field_gaps: dict[str, list[Gap]] = {}  # activity_id -> its missing-field gaps
         for act in activities:
-            field_gaps[act.id] = self._activity_field_gaps(act, snap, consumed)
+            field_gaps[act.id] = self._node_field_gaps(act, snap, consumed)
+
+        # 1b) The other scored types (P15b): Role, Stage, Objective. Kept in a separate dict so
+        # `_persona_scores` keeps measuring exactly what it always measured — the fraction of a
+        # role's *activities* that are fully described — rather than silently changing meaning.
+        other_field_gaps: list[Gap] = [
+            g
+            for card in snap.nodes.values()
+            if card.type is not NodeType.ACTIVITY and self._is_scorable(card)
+            for g in self._node_field_gaps(card, snap, consumed)
+        ]
 
         # 2) End-to-end chain + dangling handoffs.
         chain = self._chain_analysis(activities, snap)
@@ -224,6 +291,7 @@ class CompletenessEngine:
 
         all_gaps = [
             *(g for gs in field_gaps.values() for g in gs),
+            *other_field_gaps,
             *chain.gaps,
             *conflict_gaps,
         ]
@@ -236,24 +304,37 @@ class CompletenessEngine:
             gaps=all_gaps, persona_scores=persona_scores, org=org, satisfied=satisfied
         )
 
-    # --- per-activity field coverage ---
+    # --- per-node field coverage (Activity, Role, Stage, Objective) ---
 
-    def _activity_field_gaps(
-        self, act: NodeCard, snap: _Snapshot, consumed: set[str]
+    def _is_scorable(self, card: NodeCard) -> bool:
+        """Whether this node is a claim about the business yet, and so worth scoring.
+
+        A node whose *only* provenance is the seeded role registry is **vocabulary, not testimony**
+        (P15a, ADR #33) — the same rule `ingest` and `crosspersona` already apply to corroboration.
+        Scoring it would file "Who does the Chief Operating Officer report to?" as a real gap
+        for ten roles nobody has mentioned, and `satisfied` could never become true. The moment
+        a person actually mentions the role it gains live provenance and starts being scored.
+        """
+        if card.type not in _SCORED_TYPES:
+            return False
+        return any(p.said_by != REGISTRY_SAID_BY for p in card.provenance)
+
+    def _node_field_gaps(
+        self, card: NodeCard, snap: _Snapshot, consumed: set[str]
     ) -> list[Gap]:
-        fields = self._ont.completeness_fields(NodeType.ACTIVITY)
-        role_id, role_name = self._owning_role(act.id, snap)
-        latest = _latest_ts(act)
+        fields = self._ont.completeness_fields(card.type)
+        role_id, role_name = self._attributed_role(card, snap)
+        latest = _latest_ts(card)
         gaps: list[Gap] = []
         for f in fields:
-            if self._field_present(act, f, snap, consumed):
+            if self._field_present(card, f, snap, consumed):
                 continue
             gaps.append(
                 Gap(
                     kind=GapKind.MISSING_FIELD,
-                    detail=f"Activity '{act.canonical_name}' is missing its {f}.",
-                    node_id=act.id,
-                    node_name=act.canonical_name,
+                    detail=f"{card.type.value} '{card.canonical_name}' is missing its {f}.",
+                    node_id=card.id,
+                    node_name=card.canonical_name,
                     field=f,
                     role_id=role_id,
                     role_name=role_name,
@@ -263,25 +344,40 @@ class CompletenessEngine:
         return gaps
 
     def _field_present(
-        self, act: NodeCard, field_name: str, snap: _Snapshot, consumed: set[str]
+        self, card: NodeCard, field_name: str, snap: _Snapshot, consumed: set[str]
     ) -> bool:
-        if field_name in _ACTIVITY_ATTR_FIELDS:
-            return bool(act.key_attributes.get(field_name))
-        if field_name == "next_handoff":
+        edge_fields, attr_fields = _SCORED_TYPES.get(card.type, ({}, frozenset()))
+        if field_name in attr_fields:
+            return bool(card.key_attributes.get(field_name))
+        if card.type is NodeType.ACTIVITY and field_name == "next_handoff":
             # A handoff is satisfied either by an explicit HANDS_OFF_TO, or when this activity is
             # a legitimate process endpoint — it PRODUCES a final output (an artifact no other
             # activity consumes), i.e. the work leaves the org rather than passing to a next role.
-            if snap.out(act.id, EdgeType.HANDS_OFF_TO):
+            if snap.out(card.id, EdgeType.HANDS_OFF_TO):
                 return True
-            return any(art not in consumed for art in snap.out(act.id, EdgeType.PRODUCES))
-        spec = _ACTIVITY_EDGE_FIELDS.get(field_name)
+            return any(art not in consumed for art in snap.out(card.id, EdgeType.PRODUCES))
+        if card.type is NodeType.ROLE and field_name == "reports_to":
+            # Same escape hatch as `next_handoff`, for the same reason: the role at the top of the
+            # org genuinely reports to nobody, so an edge can never exist and the gap would be
+            # unclosable — asked forever no matter how the person answers. A truthy
+            # `key_attributes["reports_to"]` (e.g. "nobody — top of the org") satisfies it, which is
+            # also what makes the CEO a usable root for derived altitude (plan §6.3).
+            if snap.out(card.id, EdgeType.REPORTS_TO):
+                return True
+            return bool(card.key_attributes.get("reports_to"))
+        spec = edge_fields.get(field_name)
         if spec is None:
             # Field named in the ontology but unmapped here — treat as unknowable, not missing,
             # so a vocabulary change can't silently mark everything incomplete.
             return True
         edge_type, direction = spec
-        present = snap.out(act.id, edge_type) if direction == "out" else snap.inc(act.id, edge_type)
-        return bool(present)
+        if direction == "out":
+            return bool(snap.out(card.id, edge_type))
+        if direction == "in":
+            return bool(snap.inc(card.id, edge_type))
+        # "either" — satisfied by an edge in either direction (a lifecycle's first stage has no
+        # predecessor, its last no successor, and both are correctly *positioned*).
+        return bool(snap.out(card.id, edge_type) or snap.inc(card.id, edge_type))
 
     # --- end-to-end chain ---
 
@@ -329,15 +425,28 @@ class CompletenessEngine:
         on_path = reachable & can_reach_exit
 
         connectivity = (len(on_path) / len(ids)) if ids else 1.0
-        unbroken = bool(ids) and bool(entries) and bool(exits) and on_path == ids and not gaps
 
+        # P15b (plan §6.2) — the surgical fix for false broken-chain noise. `activity_flow` infers
+        # order ONLY from handoffs and produced→consumed artifacts, and interviews rarely yield
+        # complete artifact plumbing, so an activity everyone knows is fine reads as "broken". An
+        # activity sitting in a stage that is itself correctly positioned in the lifecycle IS
+        # located; what it's actually missing is the artifact link, which the MISSING_FIELD gaps on
+        # `inputs`/`output` already say. Reporting it as a broken chain overstates the defect and
+        # (per the pre-P15 deliverable) hid 21 activities behind 3 phantom breaks.
+        #
+        # NOTE this only suppresses the *verdict*. `connectivity` above is left as the raw fraction,
+        # and `activity_flow` is untouched — it is shared with the doc generator and is the truth
+        # about artifact/handoff flow.
         for a in sorted(ids - on_path):
+            if self._located_in_ordered_stage(a, snap):
+                continue
             gaps.append(
                 Gap(
                     kind=GapKind.BROKEN_CHAIN,
                     detail=(
                         f"Activity '{names[a]}' is not on any path from a first trigger to a "
-                        "final output — the end-to-end chain is broken here."
+                        "final output, and isn't placed in a lifecycle stage either — the "
+                        "end-to-end chain is broken here."
                     ),
                     node_id=a,
                     node_name=names[a],
@@ -346,7 +455,27 @@ class CompletenessEngine:
                     latest_ts=_latest_ts(snap.nodes.get(a)),
                 )
             )
+
+        # `not gaps` rather than `on_path == ids`: identical while no stages exist, and correct once
+        # they do — a stage-located activity is no longer counted as a break.
+        unbroken = bool(ids) and bool(entries) and bool(exits) and not gaps
         return _ChainResult(gaps=gaps, connectivity=connectivity, unbroken=unbroken)
+
+    def _located_in_ordered_stage(self, activity_id: str, snap: _Snapshot) -> bool:
+        """True when this activity is PART_OF a stage that itself has a position in the lifecycle.
+
+        Both halves matter. `PART_OF` alone is not enough: an activity in a stage that floats
+        free of every other stage is just as unplaced as one with no stage at all — the noise
+        would simply move one level up. "Positioned" here is the same test `position` uses for
+        scoring (a `PRECEDES` edge in either direction), deliberately: if the stage itself is
+        reported as unpositioned, it cannot also be good enough to place the work inside it.
+        """
+        for sid in snap.out(activity_id, EdgeType.PART_OF):
+            if sid not in snap.nodes:
+                continue
+            if snap.out(sid, EdgeType.PRECEDES) or snap.inc(sid, EdgeType.PRECEDES):
+                return True
+        return False
 
     # --- conflicts ---
 
@@ -430,13 +559,55 @@ class CompletenessEngine:
             conflict_resolution=round(conflict_resolution, 4),
             chain_connectivity=round(chain.connectivity, 4),
             chain_unbroken=chain.unbroken,
+            stage_chain_connectivity=round(self._stage_connectivity(snap), 4),
         )
+
+    def _stage_connectivity(self, snap: _Snapshot) -> float:
+        """Fraction of stages on a `PRECEDES` path from a first stage to a last one (P15b §6.2).
+
+        The lifecycle spine's own version of `chain_connectivity`. 1.0 when no stages are known yet,
+        so it cannot drag the org score down before the interview has discovered any.
+        """
+        ids = {c.id for c in snap.nodes.values() if c.type is NodeType.STAGE}
+        if not ids:
+            return 1.0
+        flow = {s: {n for n in snap.out(s, EdgeType.PRECEDES) if n in ids} for s in ids}
+        entries = {s for s in ids if not {n for n in snap.inc(s, EdgeType.PRECEDES) if n in ids}}
+        exits = {s for s in ids if not flow[s]}
+        if not entries or not exits:
+            # Every stage has both a predecessor and a successor → the order is a cycle, which is a
+            # finding rather than a crash (plan §6.3). Nothing is anchored, so nothing is on a path.
+            return 0.0
+        on_path = _bfs(entries, flow) & _bfs(exits, _reverse(flow, ids))
+        return len(on_path) / len(ids)
 
     # --- helpers ---
 
     def _owning_role(self, activity_id: str, snap: _Snapshot) -> tuple[str | None, str | None]:
         """The first role that PERFORMS this activity (for per-persona attribution)."""
         for role_id in sorted(snap.inc(activity_id, EdgeType.PERFORMS)):
+            role = snap.nodes.get(role_id)
+            if role is not None:
+                return role.id, role.canonical_name
+        return None, None
+
+    def _attributed_role(self, card: NodeCard, snap: _Snapshot) -> tuple[str | None, str | None]:
+        """Which role a gap on this node belongs to, per node type (P15b).
+
+        Attribution only affects which role a gap is *reported against*; routing into briefs is by
+        provenance (``said_by``), so a ``None`` here never loses a gap.
+        """
+        if card.type is NodeType.ACTIVITY:
+            return self._owning_role(card.id, snap)
+        if card.type is NodeType.ROLE:
+            return card.id, card.canonical_name
+        if card.type is NodeType.STAGE:
+            edge = EdgeType.OWNS
+        elif card.type is NodeType.OBJECTIVE:
+            edge = EdgeType.PURSUES
+        else:
+            return None, None
+        for role_id in sorted(snap.inc(card.id, edge)):
             role = snap.nodes.get(role_id)
             if role is not None:
                 return role.id, role.canonical_name

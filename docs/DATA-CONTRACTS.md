@@ -9,19 +9,55 @@ share them too. **If you change a contract, bump its version and flag it loudly 
 Not a list of questions — the internal definition of "what a complete picture looks like". The
 LLM may only ever **choose from** these; anything new goes to a review queue.
 
-**Node types (10):** `Role`, `Activity`, `System`, `Artifact`, `Event`, `ApprovalPoint`, `Rule`,
-`Problem`, `Desire`, `KPI`.
+**Node types (12):** **`Stage`**, `Role`, `Activity`, **`Objective`**, `System`, `Artifact`, `Event`,
+`ApprovalPoint`, `Rule`, `Problem`, `Desire`, `KPI`.
 
-**Edge types (12):** `PERFORMS` (Role→Activity), `USES` (Activity→System), `PRODUCES`,
+**Edge types (17):** `PERFORMS` (Role→Activity), `USES` (Activity→System), `PRODUCES`,
 `CONSUMES` (Activity↔Artifact), `TRIGGERS` (Event→Activity), `REQUIRES_APPROVAL_FROM`
 (Activity→Role), `HANDS_OFF_TO` (Activity→Role), `ESCALATES_TO` (Role→Role), `GOVERNED_BY`
-(Activity→Rule), `BLOCKS` (Problem→Activity), `MEASURED_BY` (Activity→KPI), `REPORTS_TO` (Role→Role).
+(Activity→Rule), `BLOCKS` (Problem→Activity), `MEASURED_BY` (Activity→KPI), `REPORTS_TO` (Role→Role),
+and the P15b lifecycle spine: **`PART_OF`** (Activity→Stage), **`PRECEDES`** (Stage→Stage),
+**`OWNS`** (Role→Stage), **`PURSUES`** (Role→Objective), **`OBJECTIVE_FOR`** (Objective→Stage).
 
-**Completeness fields** (per node type) drive the gap detector in Phase 3 — e.g. an `Activity` is
-"complete" when its trigger, inputs, system, output, next handoff, exceptions, and rules are known.
+### The lifecycle spine (P15b)
+
+`Stage` is **the spine of the process map**: one phase in the journey a single piece of work takes
+through the org (pre-sales → kickoff → discovery → build → UAT → go-live → support). Two rules:
+
+- **Stages are discovered per organisation — never a predefined list** (ADR #33). Unlike the role
+  registry, there is no `contracts/stages.json` and there must not be: assuming a stage set is the
+  day-anchored assumption in a new costume. The extractor is told to discover theirs.
+- **`PART_OF` is what makes the process map orderable.** Before it, `activity_flow()` could infer
+  order *only* from handoffs and produced→consumed artifacts, and real interviews rarely yield
+  complete artifact plumbing — so activities the business knows are fine were reported as
+  `broken chain`. An activity in a correctly-positioned stage is now *located*; only the artifact
+  link is missing, which is a `MISSING_FIELD`, not a break.
+
+`Objective` is a stated intended outcome, recorded **as stated**. It doubles as an *expectation*: an
+Objective a role attaches to a stage they don't `OWN` is, by construction, an expectation placed on
+someone else — which is why there is no separate `Expectation` type (ADR #32 uses this for the
+alignment findings).
+
+**Completeness fields** (per node type) drive the gap detector — e.g. an `Activity` is "complete"
+when its trigger, inputs, system, output, next handoff, **cadence**, exceptions and rules are known;
+a `Stage` when its position, activities, owner and exit criteria are; a `Role` when its reporting
+line and the work it performs are. **Until P15b only Activities were ever scored**, so `Role`'s
+fields were declared and never measured — which is why nothing had ever driven the org chart to
+completion. Two escape hatches keep otherwise-unclosable gaps from being asked forever:
+`Activity.next_handoff` is satisfied by producing a final output nobody consumes (the work leaves the
+org), and `Role.reports_to` by a truthy `key_attributes["reports_to"]` (the role at the top of the
+org genuinely reports to nobody — which is also what makes it a usable root for derived altitude).
+A node whose only provenance is `said_by: "registry"` is **not scored at all**: it is vocabulary, not
+a claim about the business.
+
+**`cadence`** is free text in `key_attributes`, in the answer's own terms ("every project", "per
+opportunity", "only on escalation") — deliberately **not an enum**. Without it the graph could not
+record that pre-sales demos are per-opportunity rather than daily.
 
 **Taxonomy registry:** governed hierarchical **category codes** (e.g. `05`, `05.1`) used as a
-many-to-many tag — these become the **section numbering of the final document** (Phase 10).
+many-to-many tag — these become the **section numbering of the final document** (Phase 10). P15b adds
+`00 Lifecycle & Stages` (which sorts first, so the process spine leads the document) and
+`11 Objectives & Expectations`.
 
 ## 2. Identity vs Type vs Category — three different jobs (§6.3)
 

@@ -45,8 +45,11 @@ from .base import GraphStore
 
 # NodeType -> bundle subdirectory. Kebab-case plural, browsable on GitHub/Drive.
 TYPE_DIRS: dict[NodeType, str] = {
+    # "stages" leads because it is the lifecycle spine the rest of the bundle hangs off (P15b).
+    NodeType.STAGE: "stages",
     NodeType.ROLE: "roles",
     NodeType.ACTIVITY: "activities",
+    NodeType.OBJECTIVE: "objectives",
     NodeType.SYSTEM: "systems",
     NodeType.ARTIFACT: "artifacts",
     NodeType.EVENT: "events",

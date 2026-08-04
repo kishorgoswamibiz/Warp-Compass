@@ -18,8 +18,10 @@ SLUG_RE = re.compile(r"^[a-z]+\.[a-z0-9-]+$")
 class NodeType(StrEnum):
     """Fixed node vocabulary from the ontology (§6.2). The LLM may only choose from these."""
 
+    STAGE = "Stage"
     ROLE = "Role"
     ACTIVITY = "Activity"
+    OBJECTIVE = "Objective"
     SYSTEM = "System"
     ARTIFACT = "Artifact"
     EVENT = "Event"
@@ -45,6 +47,13 @@ class EdgeType(StrEnum):
     BLOCKS = "BLOCKS"
     MEASURED_BY = "MEASURED_BY"
     REPORTS_TO = "REPORTS_TO"
+    # P15b — the lifecycle spine. PART_OF is what lets the process map be ordered by stage instead
+    # of guessed from artifact plumbing (see completeness.activity_flow).
+    PART_OF = "PART_OF"
+    PRECEDES = "PRECEDES"
+    OWNS = "OWNS"
+    PURSUES = "PURSUES"
+    OBJECTIVE_FOR = "OBJECTIVE_FOR"
 
 
 class ConfidenceStatus(StrEnum):

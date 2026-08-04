@@ -1,7 +1,9 @@
 /**
  * Phase 5 runner tests (the brief's "Test plan"):
  *  - cold start produces a generic opener and records the first answer;
- *  - a drifting answer triggers a redirect; a vague answer triggers EXACTLY one probe;
+ *  - a drifting answer triggers a redirect; a vague answer is probed within its budget
+ *    (1 normally, 3 on a lifecycle-stage thread — P15b §8.5);
+ *  - the interview is lifecycle-anchored: no opener or system-prompt line says "day";
  *  - an in-session contradiction is surfaced and reconciled;
  *  - the emitted Answer Log validates against contracts/answer-log.schema.json.
  *
@@ -11,7 +13,13 @@
 import { describe, expect, it } from "vitest";
 import { Runner } from "./runner";
 import { FakeLLMProvider } from "./llm/fake";
-import { COLD_START_OPENERS, IDENTITY_OPENER_INDEX, IDENTITY_QUESTION } from "./prompts";
+import {
+  COLD_START_OPENERS,
+  IDENTITY_OPENER_INDEX,
+  IDENTITY_QUESTION,
+  SYSTEM_PROMPT,
+} from "./prompts";
+import { isStageThread, probeBudget } from "./session";
 import { validateAnswerLog } from "./validate";
 import type { LiveDecision, SessionBrief } from "./types";
 import type { RunnerClock } from "./runner";
@@ -115,8 +123,8 @@ describe("redirect on drift", () => {
   });
 });
 
-describe("one-probe rule", () => {
-  it("probes a vague answer exactly once, then advances to the next thread", async () => {
+describe("probe budget", () => {
+  it("probes a vague non-stage thread exactly once, then advances to the next thread", async () => {
     const llm = new FakeLLMProvider([
       // 1st vague answer → the model probes
       decision({ classification: "vague", action: "probe", utterance: "Can you give a concrete example?", active_thread_id: "t1" }),
@@ -128,7 +136,7 @@ describe("one-probe rule", () => {
 
     const first = await runner.respond("It depends, the usual stuff.");
     expect(first.effectiveAction).toBe("probe");
-    expect(runner.session.hasProbed("t1")).toBe(true);
+    expect(runner.session.probeBudgetExhausted("t1")).toBe(true);
 
     const second = await runner.respond("Like I said, it just depends.");
     expect(second.effectiveAction).toBe("opener"); // advanced, not a 2nd probe
@@ -194,7 +202,7 @@ describe("declared identity (P13)", () => {
     expect(opener).toContain("Business Analyst");
     // The whole point of P13: opener 0 asks for the role, so it must not be used.
     expect(opener).not.toContain(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
-    expect(opener).toContain(COLD_START_OPENERS[1]); // straight to mapping the day
+    expect(opener).toContain(COLD_START_OPENERS[1]); // straight to mapping the lifecycle
   });
 
   it("never reaches the role opener on later cold-start turns either", () => {
@@ -334,5 +342,130 @@ describe("identity seed entry (P13 §4.1)", () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
     runner.start();
     expect(runner.log.build().entries).toHaveLength(0);
+  });
+});
+
+describe("probe budget on a lifecycle-stage thread (P15b §8.5)", () => {
+  it("treats a stage thread as a stage thread, and nothing else as one", () => {
+    expect(isStageThread("thread.missing_field.stg.discovery.activities")).toBe(true);
+    expect(probeBudget("thread.missing_field.stg.discovery.activities")).toBe(3);
+    expect(isStageThread("thread.missing_field.act.write-brd.trigger")).toBe(false);
+    expect(probeBudget("thread.missing_field.act.write-brd.trigger")).toBe(1);
+    expect(isStageThread("thread.missing_field.role.ba.reports_to")).toBe(false);
+  });
+
+  it("allows three probes on a stage, then covers it and advances", async () => {
+    const stageThread = "thread.missing_field.stg.discovery.activities";
+    const brief: SessionBrief = {
+      ...seededBrief(),
+      open_threads: [
+        {
+          id: stageThread,
+          goal: "Walk the Discovery stage",
+          why: "the stage spine is the process map",
+          priority: 1,
+          suggested_opener: "What actually happens during 'Discovery'? Walk me through it in order.",
+          followups: [],
+        },
+        {
+          id: "t-next",
+          goal: "Something else",
+          why: "next in line",
+          priority: 2,
+          suggested_opener: "And what happens after Discovery?",
+          followups: [],
+        },
+      ],
+    };
+    // Four vague answers: the model wants to probe every time. Three must land, the fourth must not.
+    const llm = new FakeLLMProvider(
+      Array.from({ length: 4 }, (_, i) =>
+        decision({
+          classification: "vague",
+          action: "probe",
+          utterance: `Probe ${i + 1}?`,
+          active_thread_id: stageThread,
+        }),
+      ),
+    );
+    const runner = new Runner(brief, llm, clock);
+    runner.start();
+
+    for (let i = 1; i <= 3; i += 1) {
+      const turn = await runner.respond("It depends.");
+      expect(turn.effectiveAction, `probe ${i} should be allowed`).toBe("probe");
+      expect(runner.session.probeCount(stageThread)).toBe(i);
+    }
+    expect(runner.session.probeBudgetExhausted(stageThread)).toBe(true);
+
+    // The 4th attempt hits the budget: the guard covers the stage and moves on.
+    const fourth = await runner.respond("Still depends.");
+    expect(fourth.effectiveAction).toBe("opener");
+    expect(runner.session.isCovered(stageThread)).toBe(true);
+    expect(runner.session.currentThreadId).toBe("t-next");
+  });
+
+  it("only lists a thread as probed once it has HIT its budget, so the model still has room", async () => {
+    const stageThread = "thread.missing_field.stg.build.activities";
+    const brief: SessionBrief = {
+      ...seededBrief(),
+      open_threads: [
+        {
+          id: stageThread,
+          goal: "Walk the Build stage",
+          why: "spine",
+          priority: 1,
+          suggested_opener: "What happens during 'Build'?",
+          followups: [],
+        },
+      ],
+    };
+    const llm = new FakeLLMProvider([
+      decision({
+        classification: "vague",
+        action: "probe",
+        utterance: "Say more?",
+        active_thread_id: stageThread,
+      }),
+    ]);
+    const runner = new Runner(brief, llm, clock);
+    runner.start();
+    await runner.respond("It varies.");
+
+    // Probed once of three — the prompt must NOT yet tell the model to stop probing it.
+    expect(runner.session.probeCount(stageThread)).toBe(1);
+    expect(runner.session.probedIds()).toEqual([]);
+  });
+});
+
+describe("the interview is lifecycle-anchored, not day-anchored (P15b)", () => {
+  it("has no cold-start opener mentioning a day", () => {
+    for (const opener of COLD_START_OPENERS) {
+      expect(opener.toLowerCase(), opener).not.toMatch(/\bday\b/);
+      expect(opener.toLowerCase(), opener).not.toMatch(/\bdaily\b/);
+      expect(opener.toLowerCase(), opener).not.toMatch(/\bmorning\b/);
+    }
+  });
+
+  it("asks about the journey of one piece of work, and about cadence", () => {
+    const all = COLD_START_OPENERS.join(" ").toLowerCase();
+    expect(all).toContain("one piece of work");
+    expect(all).toContain("on every project");
+  });
+
+  it("tells the model the unit of structure is the stage, and forbids the calendar day", () => {
+    expect(SYSTEM_PROMPT).toContain("STAGE");
+    expect(SYSTEM_PROMPT).toContain("DO NOT organise anything around a calendar day");
+    expect(SYSTEM_PROMPT).toContain("NEVER assume these; discover theirs");
+    // Two passes: map first, then one stage at a time.
+    expect(SYSTEM_PROMPT).toContain("PASS A");
+    expect(SYSTEM_PROMPT).toContain("PASS B");
+    // Expectations are recorded as stated, never reconciled away — the P15c signal.
+    expect(SYSTEM_PROMPT).toContain("record it as stated");
+  });
+
+  it("still forbids leading with pain-point questions, and keeps the spoken-length cap", () => {
+    expect(SYSTEM_PROMPT).toContain("most difficult/frustrating part");
+    expect(SYSTEM_PROMPT).toContain("under 30 words");
   });
 });

@@ -7,10 +7,12 @@
  * the next utterance → apply a thin deterministic guard layer ("LLM proposes, rules dispose",
  * AGENTS.md) → append to the Answer Log → return the next utterance.
  *
- * The only guard with teeth is the **one-probe rule**: a vague thread is probed at most once, then
- * the runner advances. Cold-start openers and thread advancement are deterministic so the loop is
- * testable without a live model; everything conversational (redirect, reconcile, acknowledge,
- * reword) is the model's call.
+ * The only guard with teeth is the **probe budget**: a vague thread gets a bounded number of
+ * follow-ups, then the runner covers it and advances. That budget is 1 for most threads and 3 for a
+ * lifecycle-**stage** thread (P15b §8.5) — walking a stage genuinely takes several turns, and the P5
+ * "never twice" rule cut the deep dive off before it started. Cold-start openers and thread
+ * advancement stay deterministic so the loop is testable without a live model; everything
+ * conversational (redirect, reconcile, acknowledge, reword) is the model's call.
  */
 
 import { AnswerLogBuilder } from "./answerlog";
@@ -153,15 +155,16 @@ export class Runner {
 
     if (decision.action === "probe") {
       const tid = threadAtQuestion ?? decision.active_thread_id;
-      if (tid && s.hasProbed(tid)) {
-        // One-probe rule: never probe the same thread twice — cover it and advance.
+      if (tid && s.probeBudgetExhausted(tid)) {
+        // Probe budget spent (1 normally, 3 on a lifecycle-stage deep dive — P15b §8.5):
+        // cover the thread and advance rather than circling it.
         s.markCovered(tid);
         const adv = this.advance();
         effectiveAction = adv.action;
         utterance = adv.utterance;
       } else if (tid) {
         s.markProbed(tid);
-        s.currentThreadId = tid; // stay on this thread for the single probe
+        s.currentThreadId = tid; // stay on this thread while it still has budget
       } else {
         s.currentThreadId = decision.active_thread_id;
       }

@@ -46,6 +46,21 @@ Rules:
   or their stated title). People change; roles persist.
 - Only emit category_codes that are in the allowed list; if unsure, leave it empty.
 - A relation's endpoints must obey the edge's (from_type -> to_type) direction.
+- STAGES ARE THE SPINE. When the answer places work in a phase of the journey one piece of work
+  takes through the org (pre-sales, kickoff, discovery, build, UAT, go-live, support, and whatever
+  else THIS org calls them), emit a Stage and link the activity to it with PART_OF. Use PRECEDES
+  when the answer says one phase comes before another. NEVER invent a stage the answer doesn't
+  support, and never assume a standard set — every org names its own. Keep stage names broad: a
+  phase of work, not a single task. Two people describing the same phase in different words must
+  land on one Stage, so put their wording in aliases.
+- CADENCE, when stated, goes in key_attributes as {"cadence": "..."} on the Activity, in the
+  answer's own terms: "every project", "per opportunity", "monthly", "only on escalation". Most
+  real work is per-project, NOT daily — never write a daily cadence unless it was actually said.
+- EXPECTATIONS AND GOALS ARE DATA, NOT NOISE. When someone states an outcome they want, or what
+  they expect of another stage/team/role, emit an Objective (PURSUES from the role who holds it,
+  OBJECTIVE_FOR the stage it is about) and record it AS STATED. Do not soften it, correct it, or
+  reconcile it against anything else in the graph — the gap between what one person expects and
+  what another describes is a finding worth reporting.
 - If the answer contains no process knowledge, return {"nodes":[],"relations":[]}.
 - No prose, no markdown — JSON only."""
 

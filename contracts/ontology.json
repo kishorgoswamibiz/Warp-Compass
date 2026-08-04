@@ -2,8 +2,10 @@
   "$schema_version": "1.0.0",
   "description": "Warp Compass ontology — the controlled vocabulary and completeness compass. The LLM may ONLY choose from these node/edge types; it may never invent new ones (anything new goes to a BA review queue). This is NOT a list of questions; it is the internal definition of 'what a complete picture looks like'. See docs/02-technical-approach.md §6.2 and docs/DATA-CONTRACTS.md.",
   "node_types": [
+    { "type": "Stage", "slug_prefix": "stg", "description": "A phase in the lifecycle of ONE piece of work as it travels through the org (e.g., Pre-Sales, Kickoff, Discovery, Build, UAT, Go-Live, Support). The spine of the process map. Discovered per organisation — NEVER a predefined list, and never anchored to a calendar day.", "completeness_fields": ["position", "activities", "owner", "exit_criteria"] },
     { "type": "Role", "slug_prefix": "role", "description": "A role/level in the org (e.g., Sales Rep, Inventory Lead, Manager). Personas map to roles.", "completeness_fields": ["reports_to", "performs"] },
-    { "type": "Activity", "slug_prefix": "act", "description": "A unit of work a role performs.", "completeness_fields": ["trigger", "inputs", "system", "output", "next_handoff", "exceptions", "rules"] },
+    { "type": "Activity", "slug_prefix": "act", "description": "A unit of work a role performs.", "completeness_fields": ["trigger", "inputs", "system", "output", "next_handoff", "cadence", "exceptions", "rules"] },
+    { "type": "Objective", "slug_prefix": "obj", "description": "A stated intended outcome — what someone wants a stage, role or the org to achieve. Recorded AS STATED by whoever stated it, never challenged or reconciled. An Objective attached to a Stage by a role that does not OWN that stage is, by construction, an EXPECTATION placed on someone else — which is why there is no separate Expectation type.", "completeness_fields": ["owner_role", "objective_for", "measured_by"] },
     { "type": "System", "slug_prefix": "sys", "description": "A tool/application used to perform an activity (e.g., CRM, spreadsheet).", "completeness_fields": ["used_by"] },
     { "type": "Artifact", "slug_prefix": "art", "description": "A document/record/data object produced or consumed by an activity (e.g., quote, order, report).", "completeness_fields": ["produced_by_or_consumed_by"] },
     { "type": "Event", "slug_prefix": "evt", "description": "A trigger that starts an activity (e.g., 'order received', 'month end').", "completeness_fields": ["triggers"] },
@@ -25,12 +27,18 @@
     { "type": "GOVERNED_BY", "from": "Activity", "to": "Rule" },
     { "type": "BLOCKS", "from": "Problem", "to": "Activity" },
     { "type": "MEASURED_BY", "from": "Activity", "to": "KPI" },
-    { "type": "REPORTS_TO", "from": "Role", "to": "Role" }
+    { "type": "REPORTS_TO", "from": "Role", "to": "Role" },
+    { "type": "PART_OF", "from": "Activity", "to": "Stage" },
+    { "type": "PRECEDES", "from": "Stage", "to": "Stage" },
+    { "type": "OWNS", "from": "Role", "to": "Stage" },
+    { "type": "PURSUES", "from": "Role", "to": "Objective" },
+    { "type": "OBJECTIVE_FOR", "from": "Objective", "to": "Stage" }
   ],
   "confidence_statuses": ["proposed", "unverified", "confirmed", "conflicting"],
   "taxonomy_registry": {
     "description": "Governed, hierarchical category codes used as a many-to-many tag on nodes (NOT node identity — see §6.3). Codes become the final document's section numbering (§11). A genuinely new code goes to a pending-taxonomy review queue, never straight into the graph.",
     "codes": [
+      { "code": "00", "label": "Lifecycle & Stages" },
       { "code": "01", "label": "Intake & Triggers" },
       { "code": "02", "label": "Core Activities" },
       { "code": "03", "label": "Tools & Systems" },
@@ -41,7 +49,8 @@
       { "code": "07", "label": "Outputs & Artifacts" },
       { "code": "08", "label": "Exceptions" },
       { "code": "09", "label": "Problems & Pain Points" },
-      { "code": "10", "label": "Metrics & KPIs" }
+      { "code": "10", "label": "Metrics & KPIs" },
+      { "code": "11", "label": "Objectives & Expectations" }
     ]
   }
 }

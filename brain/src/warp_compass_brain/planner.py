@@ -54,17 +54,26 @@ _CROSS_PERSONA_GAP_KINDS = frozenset({GapKind.ONE_SIDED_HANDOFF, GapKind.UNRESOL
 
 # Generic discovery openers for a first-ever session (empty brain). The live runner (P5) also
 # knows this list; it is the only scaffolding when there's nothing in the graph yet.
-# Ground-up + chronological by design (P12 owner feedback): the goal is the complete SOP of the
-# role, walked in order — never leading with "most difficult/frustrating part" questions.
+# Ground-up by design (P12 owner feedback): the goal is the complete SOP of the role, walked in
+# order — never leading with "most difficult/frustrating part" questions.
+#
+# ⚠ LIFECYCLE-ANCHORED, NEVER DAY-ANCHORED (P15b). No occurrence of the word "day" belongs here.
+# "What do you do day to day" produces noise, not process — the owner's own answer as a BA was
+# "I start my day checking my mails, but checking mail is not my job role." Real role work is
+# per-project: pre-sales -> demo -> signing -> kickoff -> discovery -> BRD -> build -> UAT ->
+# go-live -> support. Opener 1 is the Pass-A map question; 2-5 are Pass B, one stage at a time.
+#
+# ⚠ MUST STAY IN SYNC with `pwa/src/runner/prompts.ts` (see PROMPTS.md §2). Both copies are
+# asserted against each other by tests on each side.
 COLD_START_OPENERS: list[str] = [
-    "To start, tell me about your role — what are you responsible for, day to day?",
-    "Let's map your day from the very beginning: what's the first piece of work that lands on "
-    "your plate, and what kicks it off?",
-    "What happens right after that? Walk me through the steps one by one, in order.",
-    "For that step — what do you need in hand to start it, and which tool or screen do you do "
-    "it in?",
-    "When that piece of work leaves your hands, who picks it up next, and how does it reach "
-    "them?",
+    "To start, tell me about your role — what are you responsible for?",
+    "Think of one piece of work from the moment it reaches the company to when it's delivered. "
+    "Which parts of that journey do you touch?",
+    "Take the earliest part you touch. What has to happen before it reaches you, and what tells "
+    "you it's your turn?",
+    "Inside that part, what do you actually do — step by step, in the order you do it?",
+    "When your part is finished, what have you produced, and who picks it up?",
+    "Is that something you do on every project, or only in certain cases?",
 ]
 
 
@@ -333,6 +342,20 @@ _FIELD_OPENERS: dict[str, str] = {
     "next_handoff": "Once '{name}' is done, who picks it up next?",
     "exceptions": "What throws '{name}' off — the awkward cases that don't go to plan?",
     "rules": "Are there rules or policies you have to follow doing '{name}'?",
+    # --- P15b: the lifecycle spine, cadence, and the org chart (plan §8.3) ---
+    "cadence": "How often does '{name}' happen — every project, or only in certain cases?",
+    "position": "Where does '{name}' sit in the journey — what comes just before, and just after?",
+    "owner": "Who's accountable for '{name}' overall — not who does the tasks, who owns it?",
+    "activities": "What actually happens during '{name}'? Walk me through it in order.",
+    "exit_criteria": "How do you know '{name}' is done and it's safe to move on?",
+    # These two name the role deliberately. A Role gap fires for any role in the persona's
+    # subgraph — including one they merely *mentioned* — so copy addressed to "you" would ask a BA
+    # about their own reporting line while pointing at the QA Head's node. The runner may reword an
+    # opener (it's scaffolding, not rails) and knows whose role is whose from the identity block.
+    "reports_to": "Who does the {name} report to, and who reports in to them?",
+    "performs": "What are the main pieces of work the {name} handles?",
+    "objective_for": "What is '{name}' meant to achieve?",
+    "owner_role": "Whose goal is '{name}' — who's driving it?",
 }
 
 _FIELD_FOLLOWUPS: dict[str, list[dict[str, str]]] = {
@@ -345,6 +368,20 @@ _FIELD_FOLLOWUPS: dict[str, list[dict[str, str]]] = {
     ],
     "exceptions": [{"if": "they describe an exception", "ask": "How often does that happen?"}],
     "rules": [{"if": "they name a rule", "ask": "What happens if it isn't met?"}],
+    # --- P15b ---
+    "cadence": [{"if": "they say it varies", "ask": "What decides whether it happens or not?"}],
+    "position": [
+        {"if": "they name what comes next", "ask": "Does anything ever skip straight past it?"}
+    ],
+    "owner": [{"if": "they name someone", "ask": "Is that the same person who signs it off?"}],
+    "activities": [{"if": "they list steps", "ask": "Which of those are yours, and which aren't?"}],
+    "exit_criteria": [
+        {"if": "they describe a check", "ask": "Who decides it's met — and what if it isn't?"}
+    ],
+    "reports_to": [{"if": "they name a manager", "ask": "Is anyone else at that same level?"}],
+    "performs": [{"if": "they list work", "ask": "Which of those takes up the most time?"}],
+    "objective_for": [{"if": "they state a goal", "ask": "How would you know it's been met?"}],
+    "owner_role": [{"if": "they name a role", "ask": "Is that expectation written down anywhere?"}],
 }
 
 

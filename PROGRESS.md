@@ -10,7 +10,7 @@
 
 ## Status snapshot
 
-- **Phase:** **P0–P14 DONE · P15a DONE · P15b/P15c TODO.** Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **P0–P14 DONE · P15a + P15b DONE · P15c TODO.** Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
@@ -21,12 +21,13 @@
   **P15a** adds the governed role registry: onboarding is a **multi-select of 10 canonical roles**,
   and their spoken synonyms ("the PM" → Delivery Specialist) are seeded into the graph so mentions
   resolve onto one node instead of forking. **Nothing is blocked.**
-- **⚠ THE INTERVIEW IS STILL DAY-ANCHORED.** P15a shipped the identity half of P15; the half the
-  owner actually asked for — interviewing by the **lifecycle stage** rather than the clock — is
-  **P15b and has not started**. `contracts/ontology.json` still has no `Stage`/`Objective` node and
-  no `PRECEDES`/`PART_OF` edge, and both copies of `COLD_START_OPENERS` still say *"map your day from
-  the very beginning"*. Until P15b lands, a live session still produces the noise the owner reported
-  (*"as a BA I start my day checking my mails, but checking mail is not my job role"*).
+- **✅ THE INTERVIEW IS NOW LIFECYCLE-ANCHORED (P15b).** The word "day" is gone from every prompt
+  layer and cannot come back unnoticed — tests on **both** planes grep the openers and the system
+  prompt for `day` / `daily` / `morning`. The ontology gained the lifecycle spine (`Stage`,
+  `Objective`, `PART_OF`, `PRECEDES`, `OWNS`, `PURSUES`, `OBJECTIVE_FOR`, plus `cadence` on Activity),
+  the interviewer runs **two passes** (map the stages, then walk one at a time), and it may now stay
+  on a stage for **3 probes** instead of 1. `completeness` scores `Stage`, `Role` and `Objective` as
+  well as `Activity`, so the org chart finally gets asked about.
 - **✅ Operator prerequisite (P14) — DONE 2026-08-03.** The Drive bus folder is **Available offline**
   (screenshot: `docs/images/drive-folder-available-offline.png`). The owner ran a green round and
   deleted the `G:\My Drive\warp-compass\graph` fallback copy; `brain/_graph` is now the only graph.
@@ -35,8 +36,15 @@
 - **⚠ ONE REAL GAP OPEN:** the **live Apps Script Web App is still the P11 version** — P13's
   `Code.gs` changes were committed but never deployed, so Drive `profile.json` files get no
   `role_title` and no per-folder `README.md`. Owner action, see Blockers.
-- **Overall:** P0–P14 complete + deployed + sync live; **P15 is ~1/3 in** (P15a of P15a→b→c).
-- **Last updated:** 04 Aug 2026 · by `agent:opus-p15a`
+- **Overall:** P0–P14 complete + deployed + sync live; **P15 is ~2/3 in** (P15a + P15b of a→b→c).
+- **Last updated:** 04 Aug 2026 · by `agent:opus-p15b`
+- **Verified (04 Aug 2026, P15b):** brain `ruff` clean + `pytest` **174 passed** (9 new Stage/Role
+  scoring + broken-chain tests in `test_completeness.py`, 6 new prompt/opener tests in
+  `test_planner.py` incl. a **cross-language parity check that parses `prompts.ts`**, 7 new
+  `test_coverage.py`); PWA `typecheck` + `typecheck:functions` clean + **68 vitest** (7 new: probe
+  budget + the no-"day" guards) + `npm run build` installable. `cli coverage` smoke-tested live
+  against the real graph. Verified end-to-end that `Stage`, `Objective`, all 5 new edges and taxonomy
+  codes `00`/`11` actually reach the extractor prompt.
 - **Verified (04 Aug 2026, P15a):** brain `ruff` clean + `pytest` **152 passed** (25 in the new
   `test_roles.py`, 3 new dual-hat tests in `test_crosspersona.py`); PWA `typecheck` +
   `typecheck:functions` clean + **61 vitest** (7 new `roles.test.ts`). **`cli seed-roles` run live
@@ -57,9 +65,12 @@
   (dependency really gone). **ElevenLabs Starter plan live-verified** (P11, unchanged): TTS→STT
   round-trip exact; Pages Functions `/tts` `/stt` `/llm` live. Deploy story unchanged: one
   git-connected Cloudflare Pages project (`pwa/` + `pwa/functions/`), `worker/` optional standalone.
-- **Next up:** **P15b** — the interview rewrite (ontology `Stage`/`Objective`/`cadence`, Stage+Role
-  completeness scoring, the lifecycle prompt rewrite in **both** prompt copies, the probe budget).
-  Brief: `docs/plan/phase-15-lifecycle-and-alignment.md` §5–§8. **One owner action first: redeploy
+- **Next up:** **P15c** — the alignment diagnostic: derived altitude from `REPORTS_TO` depth,
+  `GapKind.MISALIGNMENT` (cross-altitude divergence preserved as a finding instead of reconciled
+  away), the structural findings in plan §7.2, and the stage-spine process map + "Gaps &
+  Recommendations" section in `docgen`. Brief: `docs/plan/phase-15-lifecycle-and-alignment.md` §7.
+  **This is the half that makes the deliverable consulting-grade rather than just an SOP.**
+  **One owner action first: redeploy
   the Apps Script Web App** (see Blockers — it's still the P11 version, so `role_titles` cannot reach
   Drive). Otherwise operate it: `cli run-round` per round (Answer Logs arrive automatically via
   Drive sync), `cli docgen` for the deliverable. New in P13: `cli list-participants`,
@@ -111,8 +122,8 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P14 | 14 | Survive a Google-Drive-backed bus: graph moved to local disk + FS retry | DONE | agent:opus-p14 | `brain/.../fsretry.py` (new) · `bus/folder.py` + `graphstore/okf_store.py` all I/O retried · `config.py` `fs_retry_*` · `GRAPH_ROOT` now local (`brain/_graph`) · 13 new tests (113 total) · `brain/README.md` "When the bus is on Google Drive" · `DEPLOY.md` | 2026-07-28 |
 
 | P15a | 15 | Role registry (10 roles + aliases) + multi-select onboarding + `seed-roles` | DONE | agent:opus-p15a | `contracts/roles.json` (new) · `brain/.../roles.py` + `cli seed-roles` (new) · `pwa/src/sync/roles.ts` + parity test (new) · `OnboardingCard.tsx` role chips · `participant.ts` `role_titles[]` + derived `role_title` mirror · `extractor.py` `KNOWN ROLES` block · `ingest.py` + `crosspersona.py` exclude `said_by:registry` from corroboration (R3) · `crosspersona.py`/`planner.py` dual-hat self-handoff copy (`KIND_HANDOFF_SELF`) · `Code.gs` + `_sync.ts` + `remote.ts` `role_titles` to Drive · **152 brain + 61 pwa tests** · ADR #33 · `seed-roles` **run live** (10 nodes) | 04 Aug 2026 |
-| P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §5, §6, §8. Nothing started: `contracts/ontology.json` has no `Stage`/`Objective`/`PART_OF`/`PRECEDES`/`cadence`; `completeness.py` still scores Activities **only** (so `Role.completeness_fields` stays dead code and the org chart never closes — this is what blocks derived altitude); **both** `COLD_START_OPENERS` copies (`prompts.ts`, `planner.py`) still say "day"; `session.ts` `probed` is still a `Set`, so the 3-probes-per-stage-thread budget (§8.5) isn't in. Also §8.4 `cli coverage`. | 04 Aug 2026 |
-| P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §7. Needs P15b's stages first. No `alignment.py` yet; `ingest.py` does not yet snapshot each contributor's `description` onto `Provenance` (the retention ADR #23 deferred, and the precondition for retaining both accounts); `docgen/` has no stage-spine diagram and no Gaps & Recommendations section. ADRs #31/#32 are written but marked pending. | 04 Aug 2026 |
+| P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | DONE | agent:opus-p15b | `contracts/ontology.json` (+`Stage`,`Objective`, 5 edges, `cadence`, codes `00`/`11`) · `models.py` enums · `okf_store.py` `TYPE_DIRS` (`stages/`, `objectives/`) · `completeness.py` per-type scoring + `"either"` direction + `stage_chain_connectivity` + stage-aware chain verdict + registry-only nodes unscored · `prompts.ts` `COLD_START_OPENERS` + `SYSTEM_PROMPT` (two-pass, lifecycle, no "day") · `planner.py` mirror + 9 new field openers · `session.ts`/`runner.ts` probe budget (3 stage / 1 else) · `extractor.py` stage+cadence+objective rules · `coverage.py` + `cli coverage` (new) · **174 brain + 68 pwa tests** | 04 Aug 2026 |
+| P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | TODO | — | **Brief:** `docs/plan/phase-15-lifecycle-and-alignment.md` §7. **Unblocked now** — P15b landed the stages and the `REPORTS_TO` scoring altitude depends on. Still to build: `alignment.py` (altitude from `REPORTS_TO` depth; cycles reported not crashed); `GapKind.MISALIGNMENT` + the altitude branch in `crosspersona.py` (same altitude → reconcile as today, different altitudes → **preserve both accounts as a finding, route no reconciliation thread**); the §7.2 structural findings (unowned stage, expectation with no execution, approval with no criteria, unmeasured stage, single point of failure, duplicated work, silent stage — several are already computable from `coverage.py`); `ingest.py` must snapshot each contributor's `description` onto `Provenance` (the retention ADR #23 deferred — the precondition for holding two accounts at once); `docgen/` needs the stage-spine diagram and the Gaps & Recommendations section. ADRs #31/#32 are written and marked pending. | 04 Aug 2026 |
 
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
@@ -219,6 +230,98 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 04 Aug 2026 · agent:opus-p15b — P15b LANDED: the interview is lifecycle-anchored, and Stage/Role are finally scored
+
+- **This is the half the owner actually asked for.** P15a was identity plumbing; P15b is the change
+  that stops the interviewer asking day-shaped questions. Every layer Finding 1 named is now fixed,
+  and the fix is guarded: tests on **both** planes grep `COLD_START_OPENERS` and `SYSTEM_PROMPT` for
+  `day` / `daily` / `morning`. That guard exists because the wording already drifted back once — P12
+  rewrote these prompts and the day-framing returned anyway.
+- **Ontology diff (the spine).** `Stage` (`stg`) and `Objective` (`obj`) nodes; `PART_OF`,
+  `PRECEDES`, `OWNS`, `PURSUES`, `OBJECTIVE_FOR` edges; `cadence` added to `Activity`'s completeness
+  fields; taxonomy codes `00 Lifecycle & Stages` (sorts first, so the process spine leads the
+  document) and `11 Objectives & Expectations`. `okf_store.TYPE_DIRS` gained `stages/` and
+  `objectives/` — **note this is a hard requirement, not cosmetic:** the store iterates `NodeType`
+  and raises `KeyError` on a type with no directory, which is exactly what the suite caught the moment
+  the enum grew. `Objective` doubles as *expectation* (an Objective on a stage its holder does not
+  `OWN`), so no separate type was added.
+- **Completeness generalised — Finding 3 closed.** `assess()` scored **Activities only**, so
+  `Role.completeness_fields = ["reports_to", "performs"]` had been declared in the contract and never
+  measured since P1. Nothing had ever driven the org chart to completion, which is precisely what
+  made derived altitude impossible. Now per-type field-to-graph maps for `Activity` / `Role` /
+  `Stage` / `Objective`, with the new `"either"` edge direction so a lifecycle's first stage is not
+  reported as unpositioned for having no predecessor. `_persona_scores` still counts **activities
+  only**, deliberately — that number's meaning should not change silently under the operator.
+- **Three judgement calls I had to make that the plan did not cover:**
+  (1) **Registry-seeded roles are not scored at all.** Scoring them would have filed *"Who does the
+  Chief Operating Officer report to?"* as a real gap for ten roles nobody has mentioned, and
+  `satisfied` could never have become true again. A node whose only provenance is
+  `said_by: "registry"` is vocabulary, not a claim about the business — the same rule P15a already
+  applied twice, now applied a third time. It self-clears: one real mention and the role starts being
+  scored.
+  (2) **`Role.reports_to` needed an escape hatch.** The role at the top of the org genuinely reports
+  to nobody, so no edge can ever exist and the gap would be **unclosable — asked forever no matter
+  how the person answers.** A truthy `key_attributes["reports_to"]` now satisfies it, exactly
+  mirroring how `next_handoff` is satisfied by producing a final output nobody consumes. This is also
+  what gives the altitude derivation in §6.3 a usable root.
+  (3) **A lone stage does NOT count as positioned.** My first cut let a single stage launder every
+  activity inside it out of the broken-chain check. That is a hole: `_located_in_ordered_stage` now
+  uses the same test `position` scoring uses, so if a stage is itself reported unpositioned it cannot
+  also be good enough to place the work inside it.
+- **Finding 2 fixed surgically.** `activity_flow()` is **untouched** — it is shared with the doc
+  generator and is the truth about artifact/handoff plumbing. Only the *verdict* moved:
+  `BROKEN_CHAIN` now fires only when an activity is off the flow path **and** has no `PART_OF` stage
+  that is itself positioned. `chain_connectivity` still reports the raw fraction (asserted in a test,
+  so nobody "helpfully" makes the number look better); `unbroken` became `not gaps` rather than
+  `on_path == ids`, which is identical while no stages exist. New `stage_chain_connectivity` on
+  `OrgScore` scores the spine itself and returns **1.0 vacuously** when no stages are known, so it
+  cannot drag the score down before the interview has discovered any. A `PRECEDES` cycle returns 0.0
+  and is reported, not crashed.
+- **Prompts.** `COLD_START_OPENERS` rewritten in **both** copies (6 openers: identity, the Pass-A map
+  question, then a stage walk ending in cadence) — and the duplication is now **enforced**:
+  `test_cold_start_openers_match_the_pwa_copy_verbatim` parses `prompts.ts` and compares the two
+  lists character for character. The END GOAL and METHOD blocks of `SYSTEM_PROMPT` were replaced with
+  the stage-based two-pass method. 9 new planner field openers.
+- **A copy bug the new tests caught.** My first `reports_to` opener was *"Who do you report to, and
+  who reports to you?"* — wrong, because a Role gap fires for **any** role in the persona's subgraph,
+  including one they merely *mentioned*. A BA would have been asked about their own reporting line
+  while the thread pointed at the QA Head's node. Both `reports_to` and `performs` now name the role.
+  `test_every_scored_completeness_field_has_an_opener` asserts every opener names its node, and will
+  fail on any future completeness field added without copy.
+- **Probe budget (§8.5).** `Session.probed` is a `Map<string, number>`; the budget is **3 for a
+  lifecycle-stage thread, 1 for everything else**, and the 30-word / one-question-per-turn cap is
+  kept untouched (that cap is what keeps a session feeling spoken). Stage-ness is derived from the
+  thread id (`.stg.`) rather than declared, because `session-brief.schema.json` is
+  `additionalProperties: false` and both sides can already compute it — a contract bump for that
+  would have been waste. `probedIds()` reports only threads that have **hit** their budget, so the
+  model still sees a "do NOT probe again" list rather than a counter to reason about.
+- **`cli coverage` (§8.4), new.** The stage-by-role matrix: for each stage, which roles are named in
+  it (via `OWNS` / `PERFORMS` / `HANDS_OFF_TO`) and which have an *interviewed owner*. Flags SILENT
+  stages (work happens, nobody there has been interviewed) and UNOWNED ones. Logic lives in
+  `coverage.py` so it is unit-testable rather than buried in the CLI. It doubles as risk **R1's**
+  mitigation: a forked role surfaces as an owner-less row instead of hiding.
+- **Extractor taught the new vocabulary** — stage / `PART_OF` / `PRECEDES` rules ("NEVER invent a
+  stage the answer doesn't support, and never assume a standard set"), cadence in the answer's own
+  words ("never write a daily cadence unless it was actually said"), and objectives recorded **as
+  stated**. Verified end-to-end that both new node types, all 5 new edges and codes `00`/`11` reach
+  the prompt.
+- **Verified:** brain `ruff` clean + `pytest` **174 passed** (was 152); PWA `typecheck` +
+  `typecheck:functions` clean + **68 vitest** (was 61) + `npm run build` installable; `cli coverage`
+  run live.
+- **Next: P15c**, now unblocked — it needed P15b's stages and `REPORTS_TO` scoring. Several of the
+  §7.2 structural findings are already half-built inside `coverage.py` (unowned stage, silent stage),
+  so start by reading it rather than writing them again.
+- **Gotchas:** (1) **Adding a `NodeType` means adding a `TYPE_DIRS` entry** or `okf_store` raises
+  `KeyError` on close — it iterates the enum. (2) **Adding a completeness field to the ontology means
+  adding a planner opener**, or the thread falls back to the raw `goal` string and reads like a form
+  field; there is a test. (3) `chain_connectivity` and `stage_chain_connectivity` are **two different
+  numbers** — the first is artifact/handoff plumbing, the second the lifecycle spine. A stage-located
+  activity deliberately still lowers the first. Do not "fix" that. (4) The org score is now an average
+  of **four** terms, not three, so historical score values are not comparable across P15b. (5) Both
+  `COLD_START_OPENERS` copies are compared **verbatim** by a brain test that parses `prompts.ts` — if
+  you reformat that array (change quoting, wrap a line differently), fix the regex in
+  `test_cold_start_openers_match_the_pwa_copy_verbatim` rather than loosening the assertion.
 
 ### 04 Aug 2026 · agent:opus-p15a — P15a LANDED (role registry, multi-select identity, seed-roles run live). P15b/P15c still untouched.
 

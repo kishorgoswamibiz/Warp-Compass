@@ -296,6 +296,33 @@ def cmd_completeness(args) -> int:
     return 0
 
 
+def cmd_coverage(args) -> int:
+    """The stage × role matrix — which stage has no interviewed owner (P15b, plan §8.4).
+
+    Read-only, derived entirely from the graph. This is the operator's "who to invite next" list.
+    """
+    from dataclasses import asdict
+
+    from .coverage import build_coverage, render_coverage
+
+    s = get_settings()
+    graph = _open_graph(s)
+    try:
+        report = build_coverage(graph)
+    finally:
+        graph.close()
+
+    if args.json:
+        out = asdict(report) | {
+            "silent_stages": [st.stage_id for st in report.silent_stages],
+            "unowned_stages": [st.stage_id for st in report.stages if st.is_unowned],
+        }
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    else:
+        print(render_coverage(report))
+    return 0
+
+
 def cmd_docgen(args) -> int:
     """Generate the living deliverables (Phase 10): end-to-end process + per-role SOPs + problem
     register, as Markdown + Mermaid, straight from the current graph.
@@ -616,6 +643,13 @@ def main(argv: list[str] | None = None) -> int:
         "--threads", action="store_true", help="include the prioritized open-thread list"
     )
     pc.set_defaults(func=cmd_completeness)
+
+    pcov = sub.add_parser(
+        "coverage",
+        help="stage x role matrix — which lifecycle stage has no interviewed owner (P15b)",
+    )
+    pcov.add_argument("--json", action="store_true", help="emit the raw report instead of a table")
+    pcov.set_defaults(func=cmd_coverage)
 
     pcorr = sub.add_parser(
         "corroborate",

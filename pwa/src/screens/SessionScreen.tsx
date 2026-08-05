@@ -398,28 +398,19 @@ export function SessionScreen({
               ? "Thinking about what you said…"
               : " "}
       </p>
-      {currentLine && (
-        <div className="wc-transcript-wrap">
-          <div
-            className={`wc-transcript${status === "thinking" ? " wc-transcript-thinking" : ""}`}
-            key={lastAgentIdx}
-          >
-            {currentLine}
-            <span className={`wc-wavehint${speaking ? " wc-wavehint-live" : ""}`} aria-hidden>
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
-            </span>
-          </div>
-          {status === "thinking" && (
-            <div className="wc-thinking-overlay" aria-hidden="true">
-              <span className="wc-thinking-dot" />
-              <span className="wc-thinking-dot" />
-              <span className="wc-thinking-dot" />
-            </div>
-          )}
+      {/* The just-answered question is stale while the bot is thinking — vanish it rather than
+          leaving it fully readable, which read as "is this still waiting on an answer?" in
+          testing. `wc-stage-hint` above already carries the "Thinking about what you said…" copy. */}
+      {currentLine && status !== "thinking" && (
+        <div className="wc-transcript" key={lastAgentIdx}>
+          {currentLine}
+          <span className={`wc-wavehint${speaking ? " wc-wavehint-live" : ""}`} aria-hidden>
+            <i />
+            <i />
+            <i />
+            <i />
+            <i />
+          </span>
         </div>
       )}
       {lastMsg?.who === "error" && <div className="wc-msg wc-msg-error">{lastMsg.text}</div>}

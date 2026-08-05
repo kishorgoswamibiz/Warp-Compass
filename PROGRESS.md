@@ -309,6 +309,35 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 ## Handoff log (append-only · newest on top)
 
+### 05 Aug 2026 · agent:sonnet-pwa-fix-3 — PWA polish only (no phase): nudge colors + a minimal "thinking" state
+
+**Did.** Owner feedback on the previous fix, same day: (1) the save nudge banner and button flair
+used the same green as the rest of the UI, so it didn't grab attention; (2) the blur-and-dots
+"thinking" treatment took over more of the screen than wanted — read as a different UI, not the
+minimal change asked for.
+
+(1) `.wc-nudge` / `.wc-nudge-btn` (`theme.css`) now use an amber/yellow background and border
+(`#fff8e1` / `#ffca28`) with red text (`#a11`, reusing the app's existing error-message red rather
+than inventing a new one), and the button's pulsing glow (`wc-pulse-amber`) is the same amber — a
+color used nowhere else in the UI on purpose, so it reads as a warning rather than a normal accent.
+
+(2) Replaced the blur/overlay outright rather than tuning it: the transcript card in
+`SessionScreen.tsx` now simply doesn't render while `status === "thinking"`
+(`{currentLine && status !== "thinking" && (...)}`) — no overlay, no blur, no new element. The
+existing `.wc-stage-hint` caption ("Thinking about what you said…") and the bot's own thinking
+animation carry the signal, same as before this whole thread of fixes started. Removed the dead CSS
+(`.wc-transcript-wrap`, `.wc-transcript-thinking`, `.wc-thinking-overlay`, `.wc-thinking-dot`,
+`@keyframes wc-thinking-bounce`) rather than leaving it unused.
+
+**Gotcha worth keeping.** "Make the stale state visually distinct" has a cheapest-possible version
+(hide it) and a fancier version (overlay something on top of it) — reach for the cheap one first,
+especially when the fancier one's actual on-screen footprint is hard to fully predict without seeing
+it live in the real app rather than reasoning about `position: absolute` sizing in the abstract.
+
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-18/WC-19 / WC-R13/WC-R14; both **still
+say *(sha pending)***. Files: `pwa/src/screens/SessionScreen.tsx`, `pwa/src/styles/theme.css`.
+`npx vitest run` → 72 pass; `npm run typecheck` clean.
+
 ### 05 Aug 2026 · agent:sonnet-pwa-fix-2 — PWA bugfix only (no phase): the save nudge actually fires now, and "thinking" no longer looks like a live question
 
 **Did.** Owner retested right after the previous fix deployed: still no End & save nudge, plus a

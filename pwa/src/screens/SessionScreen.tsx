@@ -338,6 +338,11 @@ export function SessionScreen({
   // What the PERSON contributed — a seeded identity entry isn't an answer they gave (P13 §4.1).
   const entryCount = runnerRef.current?.log.answerCount() ?? 0;
   const busy = status !== "active" || micState === "transcribing";
+  // The Answer Log is still in flight to the brain. Leaving now would unmount the screen mid-push:
+  // the person would never learn whether it landed, and on a failure they'd never be offered the
+  // download fallback — the session's only other route into the brain. So every exit is held until
+  // the push settles (`pushAnswerLog` is bounded by PUSH_TIMEOUT_MS, so this always ends).
+  const savePending = syncState === "pushing";
 
   // What the bot is doing right now (one-shot gestures layer on top via the `gesture` prop).
   const botState: BotState = speaking
@@ -443,7 +448,12 @@ export function SessionScreen({
               {voiceOn ? "Voice on" : "Voice off"}
             </button>
           )}
-          <button className="wc-iconbtn" onClick={onExit}>
+          <button
+            className="wc-iconbtn"
+            onClick={onExit}
+            disabled={savePending}
+            title={savePending ? "Saving your answers — one moment" : "Leave this session"}
+          >
             <span className="wc-iconbtn-ico">↪</span>
             Exit
           </button>
@@ -475,8 +485,14 @@ export function SessionScreen({
                 Download a copy
               </button>
             )}
-            <button className="wc-ghost" onClick={onExit}>
-              Done
+            <button
+              className="wc-ghost"
+              onClick={onExit}
+              disabled={savePending}
+              aria-busy={savePending}
+              title={savePending ? "Saving your answers — one moment" : "Finish and return"}
+            >
+              {savePending ? "Saving…" : "Done"}
             </button>
           </div>
         </div>

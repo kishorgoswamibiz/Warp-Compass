@@ -581,9 +581,13 @@ body {
   padding: 4px 8px;
   border-radius: 10px;
 }
-.wc-iconbtn:hover {
+.wc-iconbtn:hover:not(:disabled) {
   color: var(--wc-ink);
   background: var(--wc-bg-2);
+}
+.wc-iconbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .wc-iconbtn-ico {
   font-size: 17px;

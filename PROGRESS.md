@@ -309,6 +309,29 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 ## Handoff log (append-only · newest on top)
 
+### 05 Aug 2026 · agent:opus-pwa-fix — PWA bugfix only (no phase): the closing screen no longer lets you leave mid-push
+
+**Did.** Owner found it in live testing: on the End & save screen, **Done** was tappable while the
+Answer Log was still going to Drive. `endSession` sets `syncState = "pushing"` and fires
+`pushAnswerLog`, but *Done* — and the header *Exit*, the same escape hatch — called `onExit`
+unconditionally, unmounting the screen mid-push. The person never learned whether their answers
+landed, and on a failure they were never shown the **download fallback**, which is the session's only
+other route into the brain. Both exits now wait on the push (`savePending`), *Done* reads *"Saving…"*
+while it does, and `.wc-iconbtn` got the `:disabled` styling it never had (a blocked *Exit* would
+otherwise have looked tappable).
+
+**Gotcha worth keeping.** Disabling the only way off a screen is only safe if the thing you're waiting
+on is guaranteed to finish — and **nothing** in browser fetch → Pages Function → Apps Script had a
+deadline, so a silent upstream would have left the promise pending and the person stranded on a dead
+screen. `pushAnswerLog` is now bounded by `PUSH_TIMEOUT_MS` (45s, `sync/remote.ts`); a timeout
+surfaces as `failed`, which is exactly the state that offers the download. A false "failed" costs at
+most a duplicate log, which the write-once bus discards — cheap next to a stuck screen.
+
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-14 / WC-R9; **WC-R9's *Fixed in* still
+says *(sha pending)*** — stamp it with this commit's sha, same as `24ddfd0` did for WC-R7/R8.
+Files: `pwa/src/screens/SessionScreen.tsx`, `pwa/src/sync/remote.ts` (+ test),
+`pwa/src/styles/theme.css`. `npx vitest run` → 69 pass; `npm run typecheck` clean.
+
 ### 05 Aug 2026 · agent:opus-p16a — P16a + P16a-bis LANDED: the engagement is role-scoped, not person-scoped
 
 **Why now.** The owner is about to test with **several people**, and asked whether the graph should be

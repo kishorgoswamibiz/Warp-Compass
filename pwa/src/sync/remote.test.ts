@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { pullLatestBrief, pushAnswerLog } from "./remote";
+import { PUSH_TIMEOUT_MS, pullLatestBrief, pushAnswerLog } from "./remote";
 import type { AnswerLog } from "../runner";
 import type { Participant } from "./participant";
 
@@ -58,6 +58,24 @@ describe("pushAnswerLog", () => {
   it("throws on an error response so the caller can fall back to download", async () => {
     stubFetch(502, { ok: false, error: "upstream_unreachable" });
     await expect(pushAnswerLog(log, participant)).rejects.toThrow(/upstream_unreachable/);
+  });
+
+  // Load-bearing for the closing screen: Done/Exit stay disabled while the push is in flight, so a
+  // push that never settles would leave the person stranded with no route to the download fallback.
+  it("gives up on a silent upstream instead of pending forever", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", (_url: RequestInfo | URL, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      }),
+    );
+    const pushed = pushAnswerLog(log, participant);
+    const settled = expect(pushed).rejects.toThrow(/timed out/i);
+    await vi.advanceTimersByTimeAsync(PUSH_TIMEOUT_MS + 1);
+    await settled;
+    vi.useRealTimers();
   });
 });
 

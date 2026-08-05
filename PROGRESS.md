@@ -327,8 +327,7 @@ screen. `pushAnswerLog` is now bounded by `PUSH_TIMEOUT_MS` (45s, `sync/remote.t
 surfaces as `failed`, which is exactly the state that offers the download. A false "failed" costs at
 most a duplicate log, which the write-once bus discards — cheap next to a stuck screen.
 
-**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-14 / WC-R9; **WC-R9's *Fixed in* still
-says *(sha pending)*** — stamp it with this commit's sha, same as `24ddfd0` did for WC-R7/R8.
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-14 / WC-R9 (`b431737`).
 Files: `pwa/src/screens/SessionScreen.tsx`, `pwa/src/sync/remote.ts` (+ test),
 `pwa/src/styles/theme.css`. `npx vitest run` → 69 pass; `npm run typecheck` clean.
 

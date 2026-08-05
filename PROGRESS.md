@@ -332,8 +332,7 @@ reading carefully — a line buried in friendly chat copy isn't enough; it needs
 still there when they look up, plus a hard backstop (`beforeunload`) for the case where they don't look
 up at all.
 
-**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-15 / WC-R10; **WC-R10's *Fixed in* still
-says *(sha pending)*** — stamp it with this commit's sha, same as `1243f17` did for WC-R9.
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-15 / WC-R10 (`2f2dc12`).
 Files: `pwa/src/runner/runner.ts`, `pwa/src/runner/prompts.ts`, `pwa/src/runner/index.ts`,
 `pwa/src/screens/SessionScreen.tsx`, `pwa/src/styles/theme.css`. `npx vitest run` → 69 pass;
 `npm run typecheck` clean.

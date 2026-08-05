@@ -72,6 +72,9 @@ export class Runner {
   readonly session: Session;
   readonly log: AnswerLogBuilder;
   private readonly identity?: Identity;
+  // Set once THREADS_DONE_UTTERANCE has fired, so a person who keeps talking after "we've covered
+  // everything" doesn't hear the same wrap-up line repeated on every subsequent turn.
+  private announcedDone = false;
 
   constructor(
     brief: SessionBrief,
@@ -182,6 +185,27 @@ export class Runner {
       // Trust the model's choice of which thread the next utterance addresses.
       s.currentThreadId = decision.active_thread_id;
     }
+
+    // The model is never told `closing: true` (see `decide`), and its own "close" action only
+    // reaches here via the probe-exhaustion branch above — which requires the LAST remaining
+    // thread specifically to be the one that got probed out, not just "no threads are left". A
+    // thread that completes via "opener"/"acknowledge" (decision.thread_complete, no probing
+    // involved) falls through both branches above with nothing checking whether that was the
+    // final one. So check directly: on a briefed (non-cold-start) session, once every thread is
+    // covered, force the close regardless of what the model chose for this turn — a briefed
+    // session running dry is an objective fact the guard layer must not miss (WC-R11).
+    if (
+      effectiveAction !== "close" &&
+      !this.announcedDone &&
+      !s.brief.cold_start &&
+      s.brief.open_threads.length > 0 &&
+      s.allThreadsCovered()
+    ) {
+      effectiveAction = "close";
+      utterance = THREADS_DONE_UTTERANCE;
+      s.currentThreadId = null;
+    }
+    if (effectiveAction === "close") this.announcedDone = true;
 
     s.lastAgentUtterance = utterance;
     return { utterance, decision, effectiveAction };

@@ -309,6 +309,46 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 ## Handoff log (append-only · newest on top)
 
+### 05 Aug 2026 · agent:sonnet-pwa-fix-2 — PWA bugfix only (no phase): the save nudge actually fires now, and "thinking" no longer looks like a live question
+
+**Did.** Owner retested right after the previous fix deployed: still no End & save nudge, plus a
+separate complaint that mid-turn ("thinking") the previous question stays fully readable, so it's
+unclear whether it still needs answering.
+
+Root-caused the first one properly this time (WC-R10's fix didn't actually work): `Runner.respond()`
+only ever calls `advance()` — the one place that can emit `action: "close"` — from inside the
+`action === "probe"` branch, once THAT thread's probe budget is spent. A thread that completes via
+`"opener"`/`"acknowledge"` (the model saying `thread_complete: true` without ever probing, which is
+the common case) falls through untouched, and nothing re-checks whether it was the last one left. Worse,
+a **cold-start** session (`open_threads: []`, i.e. every first-ever test) has no thread list to exhaust
+at all — the model free-narrates forever and is never told `closing: true`, so per its own prompt rule
+it structurally can't say `close`. The owner's retest was almost certainly cold-start, which is exactly
+the case the previous fix could never reach.
+
+Fixed at the runner level: `respond()` now directly checks, after the guard layer, whether every brief
+thread is covered on a non-cold-start session, and if so forces `effectiveAction = "close"` with
+`THREADS_DONE_UTTERANCE` regardless of the model's own choice that turn — a one-shot `announcedDone`
+flag stops it repeating on later turns. Cold start still can't be force-closed this way (nothing to
+exhaust), so the UI now also carries a permanent `.wc-savehint` caption under the button that doesn't
+depend on close-detection at all.
+
+For the second complaint: the stage's transcript card now blurs (`filter: blur(4px)`, `opacity: 0.5`)
+the instant `status === "thinking"`, with three bouncing dots fading in on top of it
+(`.wc-transcript-wrap` / `.wc-thinking-overlay` / `.wc-thinking-dot` in `theme.css`) — the stale
+question visibly stops looking answerable instead of just being narrated as such by the small caption
+above it.
+
+**Gotcha worth keeping.** A "the model signaled it's done" guard is only as strong as every branch that
+can actually complete the last unit of work — not just the one branch the original incident happened to
+go through. Traced all of them this time, including the branch with literally zero threads (cold start),
+and kept one close-detection-independent fallback (the permanent caption) for the case where the signal
+can't exist yet.
+
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-16/WC-17 / WC-R11/WC-R12; both **still say
+*(sha pending)*** — stamp them with this commit's sha, same as `1243f17` did for WC-R9/WC-R10.
+Files: `pwa/src/runner/runner.ts` (+ test), `pwa/src/screens/SessionScreen.tsx`,
+`pwa/src/styles/theme.css`. `npx vitest run` → 72 pass; `npm run typecheck` clean.
+
 ### 05 Aug 2026 · agent:sonnet-pwa-fix — PWA bugfix only (no phase): a tester can no longer finish without saving
 
 **Did.** Owner reported: one test user said "yes I tested" but never tapped **End & save**, so their

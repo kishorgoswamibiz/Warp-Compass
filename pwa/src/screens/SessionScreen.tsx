@@ -399,15 +399,27 @@ export function SessionScreen({
               : " "}
       </p>
       {currentLine && (
-        <div className="wc-transcript" key={lastAgentIdx}>
-          {currentLine}
-          <span className={`wc-wavehint${speaking ? " wc-wavehint-live" : ""}`} aria-hidden>
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
+        <div className="wc-transcript-wrap">
+          <div
+            className={`wc-transcript${status === "thinking" ? " wc-transcript-thinking" : ""}`}
+            key={lastAgentIdx}
+          >
+            {currentLine}
+            <span className={`wc-wavehint${speaking ? " wc-wavehint-live" : ""}`} aria-hidden>
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          </div>
+          {status === "thinking" && (
+            <div className="wc-thinking-overlay" aria-hidden="true">
+              <span className="wc-thinking-dot" />
+              <span className="wc-thinking-dot" />
+              <span className="wc-thinking-dot" />
+            </div>
+          )}
         </div>
       )}
       {lastMsg?.who === "error" && <div className="wc-msg wc-msg-error">{lastMsg.text}</div>}
@@ -593,6 +605,11 @@ export function SessionScreen({
               End &amp; save
             </button>
           </div>
+          {!botSignaledClose && (
+            <p className="wc-savehint">
+              Tap <strong>"End &amp; save"</strong> when you're done — that's what saves your answers.
+            </p>
+          )}
         </div>
       )}
     </div>

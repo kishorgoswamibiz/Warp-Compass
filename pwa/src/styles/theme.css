@@ -268,6 +268,12 @@ body {
   color: var(--wc-green-deep);
   animation: wc-pulse 1.4s ease-in-out infinite;
 }
+.wc-savehint {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--wc-ink-soft);
+  text-align: center;
+}
 
 /* ── Voice (Phase 7) ──────────────────────────────────────────────────────── */
 .wc-mic {
@@ -618,6 +624,13 @@ body {
   color: var(--wc-ink-soft);
 }
 
+/* wraps the transcript card so the "thinking" dots can sit exactly on top of it, sized to the
+   card's own content width rather than the full stage (inline-flex, not flex/block). */
+.wc-transcript-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
 /* the bot's transcript: the current question, captioned under the face */
 .wc-transcript {
   max-width: 46ch;
@@ -631,6 +644,7 @@ body {
   word-break: break-word;
   box-shadow: 0 12px 32px rgba(12, 15, 13, 0.06);
   animation: wc-transcript-in 0.35s ease;
+  transition: filter 0.25s ease, opacity 0.25s ease;
 }
 @keyframes wc-transcript-in {
   from {
@@ -640,6 +654,47 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* While the bot is "thinking", the just-answered question is stale, not the next thing to answer
+   — blurring it (rather than leaving it crisp) is what stops a person re-reading it and wondering
+   "do I need to answer this again?" (reported live testing feedback, 05 Aug 2026). */
+.wc-transcript-thinking {
+  filter: blur(4px);
+  opacity: 0.5;
+}
+.wc-thinking-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.wc-thinking-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wc-green-deep);
+  animation: wc-thinking-bounce 1s ease-in-out infinite;
+}
+.wc-thinking-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.wc-thinking-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes wc-thinking-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-6px);
+    opacity: 1;
   }
 }
 

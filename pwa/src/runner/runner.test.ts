@@ -188,6 +188,70 @@ describe("answer log contract", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WC-R11 — a briefed session running dry must force a close even when the model
+// never says "close" itself and no thread happened to get probed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("all threads run dry without ever probing (WC-R11)", () => {
+  it("forces a close once the last thread completes via a non-probe action", async () => {
+    const llm = new FakeLLMProvider([
+      decision({
+        classification: "clear",
+        action: "opener", // the model itself decided to move on — no probing involved
+        utterance: "Once 'Take order' is done, who picks it up next?",
+        active_thread_id: "t2",
+        thread_complete: true, // completes t1
+      }),
+      decision({
+        classification: "clear",
+        action: "acknowledge", // the model never says "close" — it's never told the session is ending
+        utterance: "Got it, thanks!",
+        active_thread_id: null,
+        thread_complete: true, // completes t2 — nothing left in the brief
+      }),
+    ]);
+    const runner = new Runner(seededBrief(), llm, clock);
+    runner.start();
+
+    const first = await runner.respond("Whenever a customer calls in.");
+    expect(first.effectiveAction).toBe("opener");
+    expect(runner.session.isCovered("t1")).toBe(true);
+
+    const second = await runner.respond("Warehouse picks it up.");
+    expect(second.effectiveAction).toBe("close");
+    expect(second.utterance).toContain("End & save");
+    expect(runner.session.isCovered("t2")).toBe(true);
+  });
+
+  it("forces the close only once, so it doesn't repeat if the person keeps talking", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ action: "opener", utterance: "…", active_thread_id: "t2", thread_complete: true }),
+      decision({ action: "acknowledge", utterance: "Got it!", active_thread_id: null, thread_complete: true }),
+      decision({ action: "acknowledge", utterance: "Noted, thanks for adding that." }),
+    ]);
+    const runner = new Runner(seededBrief(), llm, clock);
+    runner.start();
+    await runner.respond("Whenever a customer calls in.");
+    const closed = await runner.respond("Warehouse picks it up.");
+    expect(closed.effectiveAction).toBe("close");
+
+    const after = await runner.respond("Oh, one more thing I forgot to mention.");
+    expect(after.effectiveAction).toBe("acknowledge");
+    expect(after.utterance).toBe("Noted, thanks for adding that.");
+  });
+
+  it("a cold-start session (no brief threads) is never force-closed this way", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ classification: "clear", action: "acknowledge", utterance: "Tell me more." }),
+    ]);
+    const runner = new Runner(coldBrief(), llm, clock);
+    runner.start();
+    const { effectiveAction } = await runner.respond("I do all sorts of things.");
+    expect(effectiveAction).toBe("acknowledge"); // NOT force-closed — cold start has no threads to run dry
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Phase 13 — a DECLARED identity means the role is never asked for again.
 // ─────────────────────────────────────────────────────────────────────────────
 

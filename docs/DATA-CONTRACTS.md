@@ -159,6 +159,24 @@ per-folder `README.md`, `lifecycle.py`, `cli list-participants`) works untouched
 is minted from the **first** role only and never moves when a hat is added or dropped (ADR #29) — the
 id is a durable label, `role_titles` is the truth about what someone does.
 
+**The declaration is load-bearing, not decoration (P16, ADRs #34/#36).** Since P16a the brain *reads*
+it: `lifecycle.declared_roles(bus)` yields `persona_id -> titles`, and `roles.resolve_declared_roles`
+maps those titles onto **Role node ids**. Two behaviours depend on it — a declared role is **owned**
+(so handoffs to it reach the person), and a role's open gaps are **inherited** by every live holder.
+Three consequences for anyone touching this contract:
+
+1. **The joined mirror is a real read path, not legacy padding.** `profile_role_titles` splits
+   `role_title` on `" / "` whenever `role_titles` is absent, which is the live case until the Apps
+   Script Web App is redeployed (see `ISSUES.md` WC-01). Lossless only because no canonical role name
+   contains `" / "` — **keep it that way**.
+2. **Resolution goes through the graph's Role cards, never the registry slug.** `seed_roles` may have
+   *adopted* an existing node under a different id (`role.business-analyst` where the registry says
+   `role.business-analysis-specialist`); keying off the slug would point at a node that doesn't exist
+   and the declared role would silently own nothing.
+3. **A title that matches nothing is dropped, not minted.** It means a role nobody has described yet,
+   which `cli coverage` reports (`roles_declared_but_silent`) rather than something to invent a node
+   for.
+
 **Stages are deliberately NOT a contract.** Roles are governed because the engagement knows them;
 lifecycle stages are **discovered per organisation**, because a predefined stage list is the
 day-anchored assumption in a new costume (ADR #33).

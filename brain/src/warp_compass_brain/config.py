@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # P13: questions inherited from retired teammates, appended BELOW a person's own threads. Keep
     # it small — they're someone else's process, and too many turns a brief into a quiz.
     planner_orphan_max: int = 2
+    # P16a-bis: open questions on a role this person DECLARED but hasn't personally described,
+    # appended below their own work. Larger than the orphan cap on purpose — this is their own job,
+    # not a departed colleague's — but still capped, because a newly joined holder of a well-covered
+    # role would otherwise get a brief made entirely of other people's accounts (phase-16 R6).
+    planner_role_max: int = 4
 
     # --- Review queues (Phase 2) ---
     quarantine_path: str = "./_state/quarantine.jsonl"

@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from .completeness import load_snapshot
 from .graphstore.base import GraphStore
 from .models import EdgeType, NodeType
-from .roles import REGISTRY_SAID_BY
+from .roles import REGISTRY_SAID_BY, resolve_declared_roles
 
 
 @dataclass
@@ -39,10 +39,25 @@ class RoleCoverage:
     interviewed_by: list[str] = field(default_factory=list)
     #: How the role turns up in this stage: "owns", "performs", "receives" (may be several).
     via: list[str] = field(default_factory=list)
+    #: Personas who **declared** this role at onboarding but whose answers have not produced any of
+    #: its activities yet (P16a). Since P16a a declared role is *owned* for routing purposes, so
+    #: these people are already receiving its handoffs and its inherited gaps — this list is what
+    #: keeps that visible instead of silent (phase-16 R1).
+    declared_by: list[str] = field(default_factory=list)
 
     @property
     def has_interviewed_owner(self) -> bool:
         return bool(self.interviewed_by)
+
+    @property
+    def is_declared_but_silent(self) -> bool:
+        """Somebody says they hold this role, but has described none of its work yet.
+
+        Materially different from "nobody owns this": that is an invite-list entry, this is a person
+        already in the engagement who simply hasn't been asked the right questions yet — and after
+        P16a-bis, one who is now being asked them. Before P16a the two were indistinguishable.
+        """
+        return bool(self.declared_by) and not self.interviewed_by
 
 
 @dataclass
@@ -68,9 +83,14 @@ class StageCoverage:
 @dataclass
 class CoverageReport:
     stages: list[StageCoverage] = field(default_factory=list)
-    #: Roles named anywhere in the graph that nobody has been interviewed as, stage or no stage.
-    #: The invite list when the lifecycle hasn't been mapped yet.
+    #: Roles named anywhere in the graph that nobody has been interviewed as **and** nobody has
+    #: declared. The invite list when the lifecycle hasn't been mapped yet.
     roles_without_an_owner: list[RoleCoverage] = field(default_factory=list)
+    #: Roles somebody DECLARED at onboarding but whose work nobody has described yet (P16a). Not an
+    #: invite-list entry — the person is already here and is already being asked (P16a-bis). Listed
+    #: separately so a declared role that stays empty round after round is visible: either the
+    #: questions aren't landing, or the chip was ticked in error (phase-16 R1/R8).
+    roles_declared_but_silent: list[RoleCoverage] = field(default_factory=list)
     #: Activities with no `PART_OF` stage — the work the lifecycle spine hasn't absorbed yet.
     activities_outside_any_stage: int = 0
 
@@ -79,8 +99,13 @@ class CoverageReport:
         return [s for s in self.stages if s.is_silent]
 
 
-def build_coverage(graph: GraphStore) -> CoverageReport:
-    """Compute the stage × role matrix from a single snapshot. Read-only."""
+def build_coverage(graph: GraphStore, declared_roles=None) -> CoverageReport:
+    """Compute the stage × role matrix from a single snapshot. Read-only.
+
+    ``declared_roles`` is ``persona_id -> declared role titles`` from the bus
+    (``lifecycle.declared_roles``). Optional: without it the report is exactly the P15b one,
+    which is what the tests over a bare graph rely on.
+    """
     snap = load_snapshot(graph)
 
     stages = sorted(
@@ -90,10 +115,20 @@ def build_coverage(graph: GraphStore) -> CoverageReport:
         (c for c in snap.nodes.values() if c.type is NodeType.ROLE), key=lambda c: c.id
     )
 
-    def owners_of(role_id: str) -> list[str]:
-        """Personas that own the role: those who contributed the activities it performs.
+    declarers: dict[str, set[str]] = {}
+    for persona_id, titles in (declared_roles or {}).items():
+        for role_id in resolve_declared_roles(titles, all_roles):
+            declarers.setdefault(role_id, set()).add(persona_id)
 
-        Mirrors ``crosspersona._role_owner_personas`` — merely *mentioning* a role is not owning it.
+    def owners_of(role_id: str) -> list[str]:
+        """Personas that own the role by having *described its work*.
+
+        Deliberately narrower than ``crosspersona._role_owner_personas``, which since P16a also
+        counts a declared role as owned. This report exists to show whether anyone has actually been
+        **interviewed** as the role, so declaration is reported separately (``declared_by``) rather
+        than folded in — merging them would hide precisely the case P16a introduced, a role with a
+        routing target but no described work.
+
         The seeded registry is excluded: it is vocabulary, not a person who can be interviewed.
         """
         personas: set[str] = set()
@@ -102,6 +137,9 @@ def build_coverage(graph: GraphStore) -> CoverageReport:
             if card is not None:
                 personas.update(p.said_by for p in card.provenance)
         return sorted(personas - {REGISTRY_SAID_BY})
+
+    def declared_of(role_id: str, interviewed: list[str]) -> list[str]:
+        return sorted(declarers.get(role_id, set()) - set(interviewed))
 
     report = CoverageReport()
 
@@ -121,12 +159,14 @@ def build_coverage(graph: GraphStore) -> CoverageReport:
             card = snap.nodes.get(role_id)
             if card is None:
                 continue
+            interviewed = owners_of(role_id)
             roles.append(
                 RoleCoverage(
                     role_id=role_id,
                     role_name=card.canonical_name,
-                    interviewed_by=owners_of(role_id),
+                    interviewed_by=interviewed,
                     via=sorted(via_by_role[role_id]),
+                    declared_by=declared_of(role_id, interviewed),
                 )
             )
         report.stages.append(
@@ -140,13 +180,22 @@ def build_coverage(graph: GraphStore) -> CoverageReport:
 
     for card in all_roles:
         # A registry-only role is vocabulary nobody has claimed yet, not a person we failed to
-        # invite — listing all ten every time would drown the real signal (ADR #33).
-        if all(p.said_by == REGISTRY_SAID_BY for p in card.provenance):
+        # invite — listing all ten every time would drown the real signal (ADR #33). A role somebody
+        # DECLARED is claimed, though, even if only the registry has spoken about it, so it belongs
+        # in the report as declared-but-silent rather than being skipped.
+        if all(p.said_by == REGISTRY_SAID_BY for p in card.provenance) and card.id not in declarers:
             continue
-        if not owners_of(card.id):
-            report.roles_without_an_owner.append(
-                RoleCoverage(role_id=card.id, role_name=card.canonical_name)
+        interviewed = owners_of(card.id)
+        if not interviewed:
+            entry = RoleCoverage(
+                role_id=card.id,
+                role_name=card.canonical_name,
+                declared_by=declared_of(card.id, interviewed),
             )
+            if entry.is_declared_but_silent:
+                report.roles_declared_but_silent.append(entry)
+            else:
+                report.roles_without_an_owner.append(entry)
 
     report.activities_outside_any_stage = sum(
         1
@@ -181,9 +230,26 @@ def render_coverage(report: CoverageReport) -> str:
         if not stage.roles:
             lines.append("    (no roles named in this stage yet)")
         for r in stage.roles:
-            mark = "[x]" if r.has_interviewed_owner else "[ ]"
-            who = ", ".join(r.interviewed_by) if r.interviewed_by else "NOT INTERVIEWED"
+            mark = "[x]" if r.has_interviewed_owner else ("[~]" if r.declared_by else "[ ]")
+            if r.interviewed_by:
+                who = ", ".join(r.interviewed_by)
+            elif r.declared_by:
+                who = "DECLARED, NOT YET DESCRIBED: " + ", ".join(r.declared_by)
+            else:
+                who = "NOT INTERVIEWED"
             lines.append(f"    {mark} {r.role_name:<38} {'+'.join(r.via):<22} {who}")
+
+    if report.roles_declared_but_silent:
+        lines.append("")
+        lines.append("## Roles someone declared but hasn't described yet")
+        lines.append(
+            "    (already receiving this role's questions - NOT an invite-list entry. If one of"
+        )
+        lines.append("     these stays empty round after round, the chip may have been a mistake.)")
+        for r in report.roles_declared_but_silent:
+            lines.append(
+                f"    [~] {r.role_name}  ({r.role_id})  declared by: " + ", ".join(r.declared_by)
+            )
 
     if report.roles_without_an_owner:
         lines.append("")

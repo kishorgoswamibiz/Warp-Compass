@@ -93,6 +93,39 @@ class RoleRegistry:
         return None
 
 
+def resolve_declared_roles(titles, role_cards) -> set[str]:
+    """Declared role titles → the **Role node ids** they refer to (P16a).
+
+    ``role_cards`` is every ``Role`` node currently in the graph; matching is case-insensitive over
+    each card's canonical name *and* its aliases, so "BA", "Business Analyst" and "Business Analysis
+    Specialist" all land on one node exactly as a spoken mention would.
+
+    **Why this resolves against the graph and not against the registry slug.** ``seed_roles`` has an
+    *adopt* case: when a node under a different id already answers to one of a registry row's names
+    (an older graph holding ``role.business-analyst`` where the registry says
+    ``role.business-analysis-specialist``) it adds the aliases to the **existing** node and leaves
+    its id alone, because ids are stamped into every edge and every provenance entry. Keying
+    ownership off ``RoleEntry.slug`` would therefore point at a node that does not exist, and the
+    declared role would silently own nothing — the exact failure this function exists to prevent,
+    reintroduced one layer up.
+
+    A title that matches nothing is dropped, not invented: it means a role nobody has described yet,
+    which ``cli coverage`` reports rather than something to mint a node for here.
+    """
+    by_name: dict[str, str] = {}
+    for card in role_cards:
+        for name in (card.canonical_name, *card.aliases):
+            key = str(name).strip().lower()
+            if key:
+                by_name.setdefault(key, card.id)
+    out: set[str] = set()
+    for title in titles or ():
+        node_id = by_name.get(str(title).strip().lower())
+        if node_id:
+            out.add(node_id)
+    return out
+
+
 def load_roles(path: str | Path | None = None) -> RoleRegistry:
     """Load the registry (cached for the default path, like ``load_ontology``)."""
     if path is None:

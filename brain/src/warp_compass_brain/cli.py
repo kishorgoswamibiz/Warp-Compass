@@ -191,7 +191,7 @@ def cmd_run_round(args) -> int:
     """
     from .bus import FolderBus
     from .cycle import RoundRunner
-    from .lifecycle import effective_retired
+    from .lifecycle import declared_roles, effective_retired
     from .ontology import load_ontology
     from .planner import Planner
 
@@ -204,10 +204,15 @@ def cmd_run_round(args) -> int:
             load_ontology(),
             max_threads=s.planner_max_threads,
             orphan_max=s.planner_orphan_max,
+            role_max=s.planner_role_max,
             # P13: skip briefs for people who have left, and hand their unanswered questions to
             # whoever is still here. `effective_retired` ignores a stale marker on someone whose
             # folder has been restored.
             retired_personas=effective_retired(bus),
+            # P16a-bis: what each person said they do. Drives declared-role ownership (handoffs
+            # reach the right person) AND role-scoped inheritance (a role's open questions reach
+            # every holder, not just whoever spoke first).
+            declared_roles=declared_roles(bus),
             now=_now(),
         )
         runner = RoundRunner(bus, ingestor, planner, now=_now())
@@ -303,12 +308,17 @@ def cmd_coverage(args) -> int:
     """
     from dataclasses import asdict
 
+    from .bus import FolderBus
     from .coverage import build_coverage, render_coverage
+    from .lifecycle import declared_roles
 
     s = get_settings()
     graph = _open_graph(s)
     try:
-        report = build_coverage(graph)
+        # P16a made a declared role *owned* for routing. This report is where that stays visible:
+        # without the bus it could only say "nobody owns this", which is now a different thing from
+        # "somebody holds it but hasn't described the work yet".
+        report = build_coverage(graph, declared_roles(FolderBus(args.bus or s.bus_root)))
     finally:
         graph.close()
 
@@ -367,13 +377,23 @@ def cmd_corroborate(args) -> int:
     """
     from collections import Counter
 
+    from .bus import FolderBus
     from .crosspersona import CrossPersonaEngine
+    from .lifecycle import declared_roles
     from .ontology import load_ontology
 
     s = get_settings()
     graph = _open_graph(s)
     try:
-        engine = CrossPersonaEngine(graph, load_ontology(), now=_now())
+        engine = CrossPersonaEngine(
+            graph,
+            load_ontology(),
+            now=_now(),
+            # Without this the routing shown here would disagree with the routing `run-round`
+            # actually performs — a declared role would look ownerless in the report and owned in
+            # the briefs.
+            declared_roles=declared_roles(FolderBus(args.bus or s.bus_root)),
+        )
         report = engine.assess()
         applied = engine.corroborate() if args.apply else None
     finally:
@@ -533,19 +553,22 @@ def cmd_reset_engagement(args) -> int:
 
 def cmd_plan(args) -> int:
     from .bus import FolderBus
-    from .lifecycle import effective_retired
+    from .lifecycle import declared_roles, effective_retired
     from .ontology import load_ontology
     from .planner import Planner
 
     s = get_settings()
     graph = _open_graph(s)
+    bus = FolderBus(args.bus or s.bus_root)
     try:
         planner = Planner(
             graph,
             load_ontology(),
             max_threads=s.planner_max_threads,
             orphan_max=s.planner_orphan_max,
-            retired_personas=effective_retired(FolderBus(s.bus_root)),
+            role_max=s.planner_role_max,
+            retired_personas=effective_retired(bus),
+            declared_roles=declared_roles(bus),
             now=_now(),
         )
         if args.persona:
@@ -649,6 +672,11 @@ def main(argv: list[str] | None = None) -> int:
         help="stage x role matrix — which lifecycle stage has no interviewed owner (P15b)",
     )
     pcov.add_argument("--json", action="store_true", help="emit the raw report instead of a table")
+    pcov.add_argument(
+        "--bus",
+        default=None,
+        help="bus root, for declared roles (default: settings.bus_root)",
+    )
     pcov.set_defaults(func=cmd_coverage)
 
     pcorr = sub.add_parser(
@@ -659,6 +687,11 @@ def main(argv: list[str] | None = None) -> int:
         "--apply",
         action="store_true",
         help="write confidence promotions (≥2-persona nodes + both-sided handoffs -> confirmed)",
+    )
+    pcorr.add_argument(
+        "--bus",
+        default=None,
+        help="bus root, for declared-role ownership (default: settings.bus_root)",
     )
     pcorr.set_defaults(func=cmd_corroborate)
 
@@ -684,6 +717,11 @@ def main(argv: list[str] | None = None) -> int:
         "--persona", default=None, help="a single persona_id; omit to plan for all personas"
     )
     pp.add_argument("--session", default="s_next", help="session_id to stamp on the brief(s)")
+    pp.add_argument(
+        "--bus",
+        default=None,
+        help="bus root, for retirement + declared roles (default: settings.bus_root)",
+    )
     pp.set_defaults(func=cmd_plan)
 
     args = p.parse_args(argv)

@@ -130,6 +130,59 @@ def _count_json(d: Path) -> int:
     return sum(1 for p in d.iterdir() if p.is_file() and p.suffix == ".json")
 
 
+# --- declared identity (P16a) ---------------------------------------------------------------------
+
+#: How the PWA joins several declared roles into the legacy single-string `role_title`
+#: (`pwa/src/sync/participant.ts` ROLE_JOIN). Kept writable by P15a precisely so the brain can
+#: recover the list from a bus written by an older Apps Script deployment.
+ROLE_JOIN = " / "
+
+
+def profile_role_titles(profile: dict) -> tuple[str, ...]:
+    """The roles a person **declared at onboarding**, from their ``profile.json``.
+
+    ``role_titles`` (P15a) is the truth. The ``role_title`` fallback is not defensive
+    padding — it is the live case: verified 04 Aug 2026, the deployed Apps Script is the P13
+    build, which writes the joined string and drops the array. Splitting it back on ``" / "``
+    is lossless for every role in ``contracts/roles.json`` (none contains the separator) and
+    is what lets declared-role ownership work **before** the Web App is redeployed.
+    """
+    raw = profile.get("role_titles")
+    if isinstance(raw, (list, tuple)):
+        titles = [str(t).strip() for t in raw]
+    else:
+        titles = [t.strip() for t in str(profile.get("role_title") or "").split(ROLE_JOIN)]
+
+    seen: list[str] = []
+    for t in titles:
+        if t and t.lower() not in {s.lower() for s in seen}:
+            seen.append(t)
+    return tuple(seen)
+
+
+def declared_roles(bus: FolderBus) -> dict[str, tuple[str, ...]]:
+    """``persona_id -> the role titles they declared``, for every **live** participant.
+
+    Keyed by ``persona_id`` (not participant id) because that is what provenance is stamped with and
+    what the Planner and cross-persona engine route on — the same choice ``persona_display_names``
+    makes, for the same reason.
+
+    Retired people are absent by construction: they have no folder, so ``list_participants``
+    does not return them. That is what keeps a departed person from remaining a routing target
+    for the role they used to hold.
+
+    **Someone who declared nothing still gets a key, mapped to ``()``.** The map doubles as the
+    Planner's roster of live participants (``Planner.live_personas``), and dropping the
+    role-less would put a real person who simply skipped the chips back into the hole this phase
+    exists to close: no brief, no questions, no explanation.
+    """
+    out: dict[str, tuple[str, ...]] = {}
+    for pid in bus.list_participants():
+        profile = bus.read_profile(pid)
+        out[str(profile.get("persona_id") or pid)] = profile_role_titles(profile)
+    return out
+
+
 # --- roster -------------------------------------------------------------------------------------
 
 

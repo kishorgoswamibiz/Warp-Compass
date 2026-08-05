@@ -28,10 +28,28 @@ in the engagement: capped, ranked below the person's own work, and framed in the
 because they didn't say it. Offering one to several people is intentional — two independent answers
 is exactly what promotes a fact to ``confirmed``. The pool is self-clearing: the moment a live
 persona answers, that node gains live provenance and stops being orphaned.
+
+**Role-scoped inheritance (P16a-bis, ADR #36).** Persona scoping answers *"which of MY nodes have
+gaps?"* and has no answer to *"which of MY ROLE's nodes have gaps?"* — different questions the
+moment a role has more than one holder. Three Business Analysts each describing a quarter leave
+a quarter missing, and pre-P16a-bis nobody but the original speaker was ever asked about it, so a
+role's coverage froze at whatever its first holder happened to say. So gaps on nodes performed by a
+role the persona **declared** are inherited into their brief: capped, ranked below their own work
+(same structural floor as orphans), and worded to ask for *their* version rather than a yes/no.
+
+Firing the same gap at every holder is deliberate and cannot loop, because gaps are recomputed from
+the graph each round — one holder answering removes it from everyone's next brief — and because a
+second account is the thing that promotes a fact to ``confirmed`` or exposes a genuine difference in
+how two people do the same job.
+
+**The person stays the provenance key.** Only *scoping* is role-shaped; ``said_by`` is not. Keying
+provenance by role would make two Business Analysts agreeing indistinguishable from one repeating
+himself, and would delete peer-conflict detection along with it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from .completeness import CompletenessEngine, GapKind, load_snapshot
@@ -43,8 +61,9 @@ from .crosspersona import (
     CrossPersonaEngine,
 )
 from .graphstore.base import GraphStore
-from .models import NodeType
+from .models import EdgeType, NodeType
 from .ontology import Ontology
+from .roles import REGISTRY_SAID_BY, resolve_declared_roles
 from .threads import OpenThread, threads_from_gaps
 
 # Handoff + conflict threads are owned by the cross-persona engine (P9), which routes them to the
@@ -133,25 +152,49 @@ class Planner:
         *,
         max_threads: int = 6,
         orphan_max: int = 2,
+        role_max: int = 4,
         retired_personas: set[str] | frozenset[str] | None = None,
+        declared_roles: Mapping[str, Sequence[str]] | None = None,
         now: str | None = None,
     ) -> None:
         self._g = graph
         self._ont = ontology
         self._max = max_threads
         self._orphan_max = orphan_max
+        self._role_max = role_max
         self._retired = frozenset(retired_personas or ())
+        #: ``persona_id -> declared role titles``, from the bus (P16a-bis / ADR #36). Every LIVE
+        #: participant appears, even one who declared nothing — the keys double as the roster of
+        #: people who exist but may not have spoken yet (see `live_personas`).
+        self._declared = {k: tuple(v) for k, v in (declared_roles or {}).items()}
         self._now = now
 
     def personas(self) -> list[str]:
-        """Every persona that has contributed (distinct provenance ``said_by``), sorted."""
+        """Every persona that has contributed (distinct provenance ``said_by``), sorted.
+
+        The seeded role registry is not a persona and never gets a brief: it is vocabulary, not
+        somebody who can be interviewed (``roles.REGISTRY_SAID_BY``).
+        """
         snap = load_snapshot(self._g)
         seen = {p.said_by for card in snap.nodes.values() for p in card.provenance}
-        return sorted(seen)
+        return sorted(seen - {REGISTRY_SAID_BY})
 
     def live_personas(self) -> list[str]:
-        """Contributing personas still here — the ones a brief is actually worth building for."""
-        return [p for p in self.personas() if p not in self._retired]
+        """Everyone a brief is for: contributors **∪** live participants, less the retired.
+
+        Contributors alone is not enough, and the gap is the whole point of P16a-bis. Someone who
+        has just joined has no provenance anywhere, so they are absent from ``personas()`` — and
+        pre-P16a-bis that meant ``plan_all`` wrote them no brief and their first session fell back
+        to generic cold-start openers, *even when their role had open questions waiting*. For the
+        second holder of a role that is exactly backwards: they are the best-placed person in the
+        engagement to answer, and the interview opened by asking them to introduce themselves.
+
+        Retirement still wins over both sources. A retired person keeps their graph provenance
+        forever (ADR #30) and has no bus folder, so they can appear in ``personas()`` and never in
+        ``self._declared`` — the subtraction has to come last.
+        """
+        known = set(self.personas()) | set(self._declared)
+        return sorted(known - self._retired)
 
     def plan(self, persona_id: str, *, session_id: str) -> SessionBrief:
         snap = load_snapshot(self._g)
@@ -179,7 +222,7 @@ class Planner:
         ]
         # Cross-persona handoff/conflict threads, already routed to this persona (P9).
         cross_threads = CrossPersonaEngine(
-            self._g, self._ont, now=self._now
+            self._g, self._ont, now=self._now, declared_roles=self._declared
         ).threads_for_persona(persona_id)
         threads = sorted(
             [*cross_threads, *threads_from_gaps(persona_gaps, now=self._now)],
@@ -199,6 +242,22 @@ class Planner:
                     followups=followups,
                 )
             )
+        # Open questions on THIS PERSON'S ROLES that they personally haven't touched (P16a-bis).
+        # Appended after their own work for the same structural reason as orphans below: a question
+        # about a colleague's account of your role must never outrank your own.
+        role_ids = self._persona_role_ids(persona_id, snap)
+        for t in self._role_threads(snap, report, subgraph_ids, role_ids)[: self._role_max]:
+            opener, followups = _role_opener_and_followups(t)
+            brief_threads.append(
+                BriefThread(
+                    id=f"role.{t.id}",
+                    goal=t.goal,
+                    why=_ROLE_WHY.format(role=t.role_name or "your role"),
+                    priority=len(brief_threads) + 1,
+                    suggested_opener=opener,
+                    followups=followups,
+                )
+            )
         # Questions left behind by retired teammates, appended AFTER this person's own work so the
         # rank floor is structural: they can never outrank a thread about the person's own role.
         for t in self._orphan_threads(snap, report, subgraph_ids)[: self._orphan_max]:
@@ -214,7 +273,7 @@ class Planner:
                 )
             )
         reserve = [t.id for t in threads[self._max :]]
-        summary = self._persona_summary(persona_id, subgraph_ids, snap, report)
+        summary = self._persona_summary(persona_id, subgraph_ids, snap, report, role_ids)
 
         return SessionBrief(
             session_id=session_id,
@@ -232,6 +291,67 @@ class Planner:
         a full completeness pass, and nobody would ever read it.
         """
         return [self.plan(pid, session_id=session_id) for pid in self.live_personas()]
+
+    # --- role-inherited threads (P16a-bis) ---
+
+    def _persona_role_ids(self, persona_id: str, snap) -> set[str]:
+        """The Role node ids this persona **declared** at onboarding.
+
+        **Declared, never inferred.** It is tempting to also count roles whose activities they have
+        provenance on — but that is precisely the over-reach WC-R5 had to undo in
+        ``alignment._persona_role``: an exec who merely *comments on* a Business Analyst's activity
+        picks up provenance on it, and would then start inheriting the BA's entire question set. The
+        onboarding multi-select is unambiguous and the person chose it themselves; contribution is a
+        guess. Ownership in the other direction (``crosspersona._role_owner_personas``) unions the
+        two because *being asked* is cheap and *never being asked* is the bug; here the cost is
+        reversed, so this stays strict.
+        """
+        titles = self._declared.get(persona_id)
+        if not titles:
+            return set()
+        role_cards = [c for c in snap.nodes.values() if c.type is NodeType.ROLE]
+        return resolve_declared_roles(titles, role_cards)
+
+    def _role_threads(
+        self, snap, report, subgraph_ids: set[str], role_ids: set[str]
+    ) -> list[OpenThread]:
+        """Gaps on this person's ROLE's work that they personally never spoke about.
+
+        The scenario, in the owner's words: *three BAs each describe a quarter of the role, so a
+        quarter is still missing* — and that missing quarter is one gap on shared nodes, which
+        should reach **every** holder. Persona scoping alone could only ever ask somebody about
+        nodes they had already talked about, so the second and third BA were never asked and the
+        role's coverage froze at whatever the first one happened to say.
+
+        Two properties make firing at every holder safe rather than spammy, and both are already
+        true — no ledger, no dedup pass, no way for this to loop:
+
+        * gaps are recomputed from the graph every round, so the instant **any** holder answers, the
+          gap is simply absent from everyone's next brief;
+        * a second account on a node is *wanted* — two distinct personas is what promotes a fact to
+          ``confirmed``, and if the two accounts disagree the ingest gate raises it as a conflict,
+          which is a finding rather than a defect.
+
+        Scope is the role's own work: activities it ``PERFORMS``, plus the Role node itself. Nodes
+        the person already contributed to are excluded — those are their own gaps and are already in
+        the brief above, at a higher rank.
+        """
+        if not role_ids:
+            return []
+        role_owned: set[str] = set(role_ids)
+        for role_id in role_ids:
+            role_owned.update(snap.out(role_id, EdgeType.PERFORMS))
+        inherited = {
+            nid for nid in role_owned if nid not in subgraph_ids and nid in snap.nodes
+        }
+        if not inherited:
+            return []
+        gaps = [
+            g
+            for g in report.gaps
+            if g.node_id in inherited and g.kind not in _CROSS_PERSONA_GAP_KINDS
+        ]
+        return threads_from_gaps(gaps, now=self._now)
 
     # --- orphan threads (P13) ---
 
@@ -257,11 +377,21 @@ class Planner:
 
     # --- persona summary ---
 
-    def _persona_summary(self, persona_id, subgraph_ids, snap, report) -> str:
+    def _persona_summary(self, persona_id, subgraph_ids, snap, report, role_ids=None) -> str:
         cards = [snap.nodes[nid] for nid in subgraph_ids]
+        declared = sorted(
+            snap.nodes[rid].canonical_name for rid in (role_ids or ()) if rid in snap.nodes
+        )
+        # Someone who has just joined has contributed nothing, so the graph knows only what they
+        # declared. Saying "you've described 0 activities" to a person who has not been asked
+        # anything yet reads as an accusation; name the role and let the threads do the work.
+        if not cards:
+            if declared:
+                return f"As {', '.join(declared)}, you haven't described your work yet."
+            return ""
         roles = sorted(
             c.canonical_name for c in cards if c.type is NodeType.ROLE
-        )
+        ) or declared
         activities = [c for c in cards if c.type is NodeType.ACTIVITY]
         # complete = activity with no missing-field gap attributed to it
         incomplete_ids = {
@@ -282,6 +412,59 @@ class Planner:
         if n_problems:
             parts.append(f"{n_problems} problem{'s' if n_problems != 1 else ''} raised")
         return "; ".join(parts) + "."
+
+
+# --- role-inherited copy (P16a-bis) -------------------------------------------------------------
+# A question about work someone ELSE in your role described. The normal openers presume the person
+# raised it themselves ("when you do 'X'...") which would be a small lie here, and the orphan copy
+# ("a colleague who has since left") is the wrong story too — this colleague is still here.
+#
+# The copy has one job beyond politeness: ask for THEIR version rather than a yes/no. Two accounts
+# of one node is what promotes a fact to `confirmed`, and if the two differ, that divergence is a
+# finding. "Is that right?" throws both away; "how do you do it?" collects them.
+
+_ROLE_WHY = (
+    "Someone else working as {role} described this, but you haven't — and you may well do it "
+    "differently. A second account either confirms it or surfaces a difference worth knowing about."
+)
+
+_ROLE_DONT_KNOW = {
+    "if": "they don't do this part",
+    "ask": "Understood — is that handled by someone else, or does it just not come up for you?",
+}
+
+
+def _role_opener_and_followups(t: OpenThread) -> tuple[str, list[dict[str, str]]]:
+    name = t.node_name or "that step"
+    role = t.role_name or "your role"
+    if t.kind == GapKind.MISSING_FIELD.value and t.field:
+        ask = _ROLE_FIELD_ASK.get(t.field, f"the {t.field}")
+        return (
+            f"Another {role} described '{name}', but we never captured {ask}. "
+            f"How does that part go when you do it?",
+            [_ROLE_DONT_KNOW],
+        )
+    if t.kind == GapKind.BROKEN_CHAIN.value:
+        return (
+            f"'{name}' came up from someone else working as {role}, but we can't see how it "
+            "connects to the rest of the process. Where does it sit in your work?",
+            [{"if": "they place it", "ask": "What comes immediately before and after it?"}],
+        )
+    return (
+        f"Another {role} raised '{name}'. How does that work on your side?",
+        [_ROLE_DONT_KNOW],
+    )
+
+
+_ROLE_FIELD_ASK: dict[str, str] = {
+    "trigger": "what kicks it off",
+    "inputs": "what's needed in hand to start it",
+    "system": "which tool or screen it happens in",
+    "output": "what it produces",
+    "next_handoff": "who picks it up afterwards",
+    "exceptions": "what throws it off",
+    "rules": "what rules or policies govern it",
+}
 
 
 # --- orphan-thread copy (P13) -----------------------------------------------------------------

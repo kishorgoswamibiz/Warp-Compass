@@ -22,18 +22,20 @@ The Planner (P4) pulls each persona's routed threads at high priority. ``corrobo
 companion *write* pass (confidence promotion) the operator/cycle runs; everything else is read-only.
 
 Persona scoping = provenance ``said_by`` (ADR #17; there is no ``:Persona`` node). A persona
-*owns* a role when it performs that role's activities — mentioning a role is not being it.
+*owns* a role when it performs that role's activities **or declared that role at onboarding**
+(P16a, ADR #34) — merely *mentioning* a role is still not being it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from .completeness import load_snapshot
 from .graphstore.base import GraphStore
 from .models import ConfidenceStatus, EdgeType, NodeType
 from .ontology import Ontology
-from .roles import REGISTRY_SAID_BY
+from .roles import REGISTRY_SAID_BY, resolve_declared_roles
 from .threads import OpenThread
 
 # Thread kinds this module mints (the Planner knows these for opener/followup scaffolding).
@@ -95,10 +97,21 @@ class CorroborationResult:
 class CrossPersonaEngine:
     """Corroborates handoffs across personas, routes conflicts. Read-only except ``corroborate``."""
 
-    def __init__(self, graph: GraphStore, ontology: Ontology, *, now: str | None = None) -> None:
+    def __init__(
+        self,
+        graph: GraphStore,
+        ontology: Ontology,
+        *,
+        now: str | None = None,
+        declared_roles: Mapping[str, Sequence[str]] | None = None,
+    ) -> None:
         self._g = graph
         self._ont = ontology
         self._now = now
+        #: ``persona_id -> declared role titles`` from the bus (P16a / ADR #34). Absent in tests and
+        #: on a pre-P15a bus, in which case ownership falls back to activity contribution alone.
+        self._declared = {k: tuple(v) for k, v in (declared_roles or {}).items()}
+        self._declared_owner_cache: dict[str, set[str]] | None = None
 
     # --- read-only assessment -----------------------------------------------------------------
 
@@ -346,18 +359,50 @@ class CrossPersonaEngine:
                 return role.id, role.canonical_name
         return None, None
 
-    def _role_owner_personas(self, role_id: str, snap) -> set[str]:
-        """Personas that *own* a role: those that contributed the activities it performs.
+    def _declared_owners(self, snap) -> dict[str, set[str]]:
+        """``role_id -> personas who DECLARED that role at onboarding`` (P16a, ADR #34).
 
-        Merely mentioning a role (provenance on the Role node) is not owning it — the persona who
-        *is* the role is the one whose interview produced its activities.
+        Computed once per snapshot: resolution walks every Role card's aliases, and this is called
+        per handoff edge.
+        """
+        if self._declared_owner_cache is not None:
+            return self._declared_owner_cache
+        role_cards = [c for c in snap.nodes.values() if c.type is NodeType.ROLE]
+        owners: dict[str, set[str]] = {}
+        for persona_id, titles in self._declared.items():
+            for role_id in resolve_declared_roles(titles, role_cards):
+                owners.setdefault(role_id, set()).add(persona_id)
+        self._declared_owner_cache = owners
+        return owners
+
+    def _role_owner_personas(self, role_id: str, snap) -> set[str]:
+        """Personas that *own* a role: those who contributed its activities, **or declared it**.
+
+        Merely mentioning a role (provenance on the Role node) is still not owning it — that part of
+        the original rule stands, and the test for it stands with it. What changed in P16a is that
+        **declaring** a role at onboarding is now sufficient on its own (ADR #34).
+
+        The reason is the failure this used to cause. A person who is genuinely the Technical
+        Specialist, but whose dev work never earned a ``PERFORMS`` edge under that hat — because the
+        extractor cannot see who is speaking (§2 Finding 1 of the phase-16 plan) — owned nothing. So
+        a colleague's "I hand the build to the Technical Specialist" found no owner,
+        ``_handoff_state`` returned ``route_discoverer``, and the **colleague** was asked
+        *"who would know?"* every round while the real person was never asked at all. Inferring
+        ownership from activities put a deterministic fact (they told us who they are) behind a
+        probabilistic one (did extraction happen to attribute it).
+
+        Declaration is the strongest evidence available and it costs nothing to consult. The trade
+        (phase-16 R1): tick a role you don't hold and you become its routing target — which
+        ``cli coverage`` surfaces as a declared owner with no activities, rather than hiding it.
         """
         personas: set[str] = set()
         for act_id in snap.out(role_id, EdgeType.PERFORMS):
             card = snap.nodes.get(act_id)
             if card is not None:
                 personas.update(p.said_by for p in card.provenance)
-        return personas
+        personas |= self._declared_owners(snap).get(role_id, set())
+        # The registry is vocabulary, not a person who can be asked anything (see `roles.py`).
+        return personas - {REGISTRY_SAID_BY}
 
     def _source_personas(self, activity_id: str, snap) -> set[str]:
         card = snap.nodes.get(activity_id)

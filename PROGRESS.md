@@ -10,7 +10,18 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL BUILD PHASES DONE (P0–P15).** **P16 is PLANNED ONLY — do not start it; the owner is deciding** (`docs/plan/phase-16-hat-fidelity.md`). Feature-complete + deployed: ingest spine → completeness →
+- **Phase:** **ALL BUILD PHASES DONE (P0–P15) + P16a + P16a-bis.** **P16b–d remain PLAN ONLY** —
+  decide after one multi-person round (`docs/plan/phase-16-hat-fidelity.md`).
+  **⚠ The engagement is now ROLE-SCOPED, not person-scoped (05 Aug 2026).** Two routing bugs are
+  closed, both of which only bit with more than one person on the bus: a role somebody **declared**
+  at onboarding is now **owned** (so a colleague's handoff reaches them instead of looping on the
+  discoverer forever — ADR #34), and a role's **open gaps now reach every live holder of that role**,
+  not just whoever happened to describe the node first (ADR #36). Three BAs each describing a quarter
+  of the role now leaves one gap that fires at all three and closes for all three the moment any one
+  answers. A newly joined holder gets a real brief instead of a generic cold start.
+  **Provenance stays keyed to the person** — that is what keeps two BAs agreeing distinguishable from
+  one BA repeating himself, and keeps peer-conflict detection alive.
+  Feature-complete + deployed: ingest spine → completeness →
   Planner → live runner → PWA + key-proxy → **voice (live TTS+STT, Starter plan)** → sync cycle →
   connected cross-persona brain → documentation generator → **P11 automatic Google Drive sync** →
   **P12 OKF Markdown graph store (Neo4j REMOVED — no database server at all)** → **P13 declared
@@ -33,13 +44,30 @@
   deleted the `G:\My Drive\warp-compass\graph` fallback copy; `brain/_graph` is now the only graph.
   `cli list-participants`, which hung >6 min on 2026-07-28, now returns instantly — the stream-only
   symptom is gone. See `brain/README.md` → "When the bus is on Google Drive".
-- **⚠ ONE REAL GAP OPEN:** the **live Apps Script Web App is still the P11 version** — P13's
-  `Code.gs` changes were committed but never deployed, so Drive `profile.json` files get no
-  `role_title` and no per-folder `README.md`. Owner action, see Blockers.
+- **✏ CORRECTION (05 Aug 2026) — the Apps Script blocker was overstated.** This board said the live
+  Web App was "still the P11 version" writing no `role_title` and no `README.md`. Verified against
+  the live Drive folder: it is the **P13** build — `profile.json` **does** carry `role_title` with
+  P15a's `" / "` join, and `README.md` **is** written (its singular `| **Role** |` header is what
+  dates it; P15a emits `| **Role(s)** |`). Only P15a's two-line `Code.gs` delta is undeployed, and
+  **the brain reads neither half of it** — P16a recovers both hats by splitting the joined string.
+  Redeploy is still wanted before **P16b**. See `ISSUES.md` WC-01.
+- **✅ WC-02 / WC-08 cleared (05 Aug 2026).** The duplicate participant folder `…-f25b` was the cause
+  of *both* the two-persona risk and the "`cli list-participants` returns nothing" mystery: it was
+  unreadable through Drive/Dokan, and since `list_participants()` enumerates and every caller then
+  reads *every* profile, one bad folder blocked every bus command. Owner moved it out of
+  `participants/`; `list-participants` now returns one active participant instantly.
 - **Overall:** ▰▰▰▰▰▰▰▰▰▰ P0–P15 complete + deployed + sync live. The deliverable is now an SOP
   **plus** a gap-and-recommendation report — the EY/PwC-style output the engagement is meant to
   replace. Optional-only work remains (transcript Docs, STT field-WER eval).
-- **Last updated:** 04 Aug 2026 · by `agent:opus-p15c`
+- **Last updated:** 05 Aug 2026 · by `agent:opus-p16a`
+- **Verified (05 Aug 2026, P16a + P16a-bis):** brain `ruff` clean + `pytest` **229 passed** (25 new
+  in `test_role_scoping.py`, zero regressions from 204). **Smoke-tested live against the real Drive
+  bus and the real `OkfGraphStore`:** `cli plan --persona kishor-…-8750` returns
+  `"As Business Analysis Specialist, Technical Specialist, you haven't described your work yet."` —
+  i.e. both declared hats reached the brain by splitting the live P13 profile's joined `role_title`,
+  with no Apps Script redeploy. `cli coverage` renders the new section, resolving both hats onto
+  `role.business-analysis-specialist` and `role.technical-specialist` through the registry aliases.
+  PWA untouched this phase.
 - **Verified (04 Aug 2026, P15c):** brain `ruff` clean + `pytest` **204 passed** (20 new
   `test_alignment.py` covering altitude/cycles/misalignment-vs-conflict and one fixture per §7.2 row,
   10 new docgen tests); PWA unchanged and still green (`typecheck` + **68 vitest**). **Smoke-tested
@@ -141,7 +169,9 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P15b | 15 | Lifecycle-anchored interviewing: ontology `Stage`/`Objective`/`cadence` + Stage/Role completeness scoring + prompt rewrite + probe budget | DONE | agent:opus-p15b | `contracts/ontology.json` (+`Stage`,`Objective`, 5 edges, `cadence`, codes `00`/`11`) · `models.py` enums · `okf_store.py` `TYPE_DIRS` (`stages/`, `objectives/`) · `completeness.py` per-type scoring + `"either"` direction + `stage_chain_connectivity` + stage-aware chain verdict + registry-only nodes unscored · `prompts.ts` `COLD_START_OPENERS` + `SYSTEM_PROMPT` (two-pass, lifecycle, no "day") · `planner.py` mirror + 9 new field openers · `session.ts`/`runner.ts` probe budget (3 stage / 1 else) · `extractor.py` stage+cadence+objective rules · `coverage.py` + `cli coverage` (new) · **174 brain + 68 pwa tests** | 04 Aug 2026 |
 | P15c | 15 | Alignment diagnostic: derived altitude, misalignment-vs-conflict, gap-and-recommendation report | DONE | agent:opus-p15c | `brain/.../alignment.py` (new — `derive_altitudes`, `AlignmentEngine`, 9 `FindingKind`s) · `GapKind.MISALIGNMENT` + altitude branch in `completeness._conflict_gaps` · `crosspersona` routes **no** reconciliation thread for a cross-altitude divergence (`CrossPersonaReport.misalignments`) · `Provenance.account` snapshot in `ingest.py` + `models.py` + `node-card.schema.json` + `okf_store` serializer (optional, back-compatible — retires ADR #23's deferral) · `docgen/traverse.py` `StageGroup` + stage-ordered narrative + `KnowledgeGap` · `docgen/render.py` Mermaid **subgraphs** per stage + "Gaps & Recommendations" · **204 brain tests** · ADRs #31/#32 marked done | 04 Aug 2026 |
 
-| P16 | 16 | Hat fidelity: attributing work when one person wears several roles | TODO (**plan only — owner is deciding; do NOT start development**) | — | **Plan:** `docs/plan/phase-16-hat-fidelity.md`. Splits into **P16a** declared-role ownership (fixes the live routing bug — deterministic, no LLM, no extractor change) → **P16b** `SPEAKER` block in the extractor + both-hats fallback → **P16c** per-hat altitude → **P16d** SOP presentation. **P16a alone is a defensible stopping point.** Open for the owner: what altitude a dual-hat person carries; whether to spend interview turns on certainty. | 04 Aug 2026 |
+| P16a | 16 | **A declared role is owned** — handoffs reach the person who ticked the chip | DONE | agent:opus-p16a | `brain/.../roles.py` `resolve_declared_roles` (new, adoption-safe) · `lifecycle.py` `profile_role_titles` + `declared_roles` (new) · `crosspersona.py` `_role_owner_personas` = contributors **∪** declarers + `_declared_owners` cache · `coverage.py` `declared_by` / `roles_declared_but_silent` / `[~]` marker · `cli.py` wires the bus into `run-round`/`plan`/`coverage`/`corroborate` (+`--bus` on three) · ADR #34 · **229 brain tests** (25 new in `test_role_scoping.py`) | 05 Aug 2026 |
+| P16a-bis | 16 | **Role-scoped gap inheritance** — a role's open questions reach every holder, and a new joiner gets a real brief | DONE | agent:opus-p16a | `planner.py` `_persona_role_ids` + `_role_threads` + role-inherited opener copy + `live_personas()` = contributors **∪** bus participants − retired + role-aware `persona_summary` · `config.planner_role_max` (4) · ADR #36 · plan doc §2 Finding 5 **corrected** (it had ruled this out of scope) | 05 Aug 2026 |
+| P16b–d | 16 | Hat *attribution* (`SPEAKER` block), per-hat altitude, SOP presentation | TODO (**plan only — decide after one multi-person round**) | — | **Plan:** `docs/plan/phase-16-hat-fidelity.md` §4. Open for the owner: what altitude a dual-hat person carries; whether to spend interview turns on certainty. P16b needs the Apps Script redeploy (it wants the unjoined `role_titles` array — see `ISSUES.md` WC-01). | 05 Aug 2026 |
 
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
@@ -278,6 +308,79 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 05 Aug 2026 · agent:opus-p16a — P16a + P16a-bis LANDED: the engagement is role-scoped, not person-scoped
+
+**Why now.** The owner is about to test with **several people**, and asked whether the graph should be
+built on roles rather than users: *"if there are three BAs and each says a quarter, the missing
+quarter should fire to the role, which goes to all three."*
+
+**The assessment, before the code.** The graph is **already** role-centric where it counts —
+`NodeType` (`models.py:18`) has no `Person` member, Role is a first-class node, and `add_edge` merges
+on `(type, from, to)` so several people's answers converge on one node. The person survives in exactly
+two places: `Provenance.said_by` and planner scoping. **Only the second was wrong.** Re-keying
+provenance to the role was considered and rejected in ADR #36: it would make two BAs agreeing
+indistinguishable from one BA repeating himself, delete peer-conflict detection and ADR #32's
+cross-altitude finding, and strand the `Provenance.account` snapshot P15c added for exactly that
+comparison. So role became a **second** dimension, not a replacement.
+
+**Two bugs closed, sharing one wire (`profile.json` → the brain).**
+
+1. **P16a — routing *in* (was `ISSUES.md` WC-03, now WC-R7).** `_role_owner_personas` defined
+   ownership purely as *"contributed this role's activities"*, so a person who genuinely **is** the
+   Technical Specialist — but whose dev work never earned a `PERFORMS` edge under that hat, because
+   the extractor cannot see who is speaking — owned nothing. A colleague's *"I hand the build to the
+   Technical Specialist"* returned `route_discoverer` and asked the **colleague** *"who would know?"*
+   every round while the real person was never asked. Now: contributors **∪** declarers (ADR #34).
+   *The old rule put a deterministic fact behind a probabilistic one.*
+2. **P16a-bis — routing *out* (new; the plan doc had explicitly ruled it out of scope).** Persona
+   scoping answers *"which of MY nodes have gaps?"* and has no answer to *"which of MY ROLE's nodes
+   have gaps?"* — different questions the moment a role has two holders. **`phase-16` §2 Finding 5
+   was wrong** and has been rewritten rather than quietly edited: its reasoning is sound for one
+   person wearing two hats and silently assumed that was the general case. Gaps on nodes performed by
+   a **declared** role are now inherited, capped (`planner_role_max`, 4), ranked below the person's
+   own work on P13's orphan floor, and worded to ask for *their* version rather than a yes/no.
+
+**Why firing at every holder cannot loop, with no ledger and no dedup pass:** gaps are recomputed
+from the graph each round, so one holder answering removes it from everyone's next brief; and a
+second account is precisely what promotes a fact to `confirmed` — or exposes a real difference in how
+two people do the same job.
+
+**Also fixed:** `live_personas()` was derived from provenance alone, so a **newly joined** holder was
+absent from `plan_all` entirely — no brief written, first session falling back to generic cold-start
+openers *while their role's questions sat unasked*. Now contributors **∪** live bus participants −
+retired. Inheritance is **declared, never inferred from contribution**: inferring would reintroduce
+the WC-R5 over-reach where an exec who merely comments on a BA's activity picks up the BA's whole
+question set.
+
+**Two board corrections, both from verifying against live data rather than trusting the record:**
+- The Apps Script deployment is **P13, not P11** — `role_title` and `README.md` *are* written; only
+  P15a's `role_titles` array is missing, and the brain reads neither half of it. WC-01 downgraded
+  High→Low.
+- `cli list-participants` returning "exit 0, no output" was **not a regression** (WC-08→WC-R8): it was
+  blocked inside `read_profile` on the unreadable `…-f25b` folder, proven by running the same command
+  against a local scratch bus where it printed correctly. One bad folder blocks *every* bus command,
+  because `list_participants()` enumerates and every caller then reads every profile.
+
+**Files.** `roles.py` (`resolve_declared_roles` — resolves against the **graph's** Role cards, not the
+registry slug, because `seed_roles` may have *adopted* an older node id) · `lifecycle.py`
+(`profile_role_titles`, `declared_roles`) · `crosspersona.py` · `planner.py` · `coverage.py` ·
+`config.py` · `cli.py` (+`--bus` on `plan`/`coverage`/`corroborate`) · `tests/test_role_scoping.py`
+(new, 25) · ADRs #34/#36 · `phase-16` plan rewritten · `ISSUES.md`.
+
+**Verified.** `ruff` clean, **229 passed** (204 → 229, zero regressions). Live smoke against the real
+Drive bus + real `OkfGraphStore`: `cli plan` returned *"As Business Analysis Specialist, Technical
+Specialist, you haven't described your work yet"* — both hats recovered from the live P13 profile's
+joined string with no redeploy — and `cli coverage` rendered both as declared-but-silent.
+
+**⚠ Next agent, read this before the multi-person round.** The graph currently holds **10 seeded
+roles and ZERO activities** — the one captured answer log has never been ingested — so none of the
+above has been exercised against real content. The load-bearing untested assumption is `ISSUES.md`
+**WC-13**: the three-quarters arithmetic only works if three people's quarters resolve onto the
+**same** nodes. Check the activity count in `_graph/index.md` after the first multi-person round
+before trusting anything else in this phase.
+
+---
 
 ### 04 Aug 2026 · agent:opus-p15c — P15c LANDED. **PHASE 15 COMPLETE**: divergence is now a finding, not a defect
 

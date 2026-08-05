@@ -344,8 +344,7 @@ go through. Traced all of them this time, including the branch with literally ze
 and kept one close-detection-independent fallback (the permanent caption) for the case where the signal
 can't exist yet.
 
-**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-16/WC-17 / WC-R11/WC-R12; both **still say
-*(sha pending)*** — stamp them with this commit's sha, same as `1243f17` did for WC-R9/WC-R10.
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-16/WC-17 / WC-R11/WC-R12 (`3a82c68`).
 Files: `pwa/src/runner/runner.ts` (+ test), `pwa/src/screens/SessionScreen.tsx`,
 `pwa/src/styles/theme.css`. `npx vitest run` → 72 pass; `npm run typecheck` clean.
 

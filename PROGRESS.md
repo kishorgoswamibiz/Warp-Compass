@@ -334,8 +334,8 @@ animation carry the signal, same as before this whole thread of fixes started. R
 especially when the fancier one's actual on-screen footprint is hard to fully predict without seeing
 it live in the real app rather than reasoning about `position: absolute` sizing in the abstract.
 
-**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-18/WC-19 / WC-R13/WC-R14; both **still
-say *(sha pending)***. Files: `pwa/src/screens/SessionScreen.tsx`, `pwa/src/styles/theme.css`.
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-18/WC-19 / WC-R13/WC-R14 (`a9be5b6`).
+Files: `pwa/src/screens/SessionScreen.tsx`, `pwa/src/styles/theme.css`.
 `npx vitest run` → 72 pass; `npm run typecheck` clean.
 
 ### 05 Aug 2026 · agent:sonnet-pwa-fix-2 — PWA bugfix only (no phase): the save nudge actually fires now, and "thinking" no longer looks like a live question

@@ -7,7 +7,7 @@
  * the Worker (AGENTS.md).
  */
 
-export { Runner, CLOSING_UTTERANCE } from "./runner";
+export { Runner, CLOSING_UTTERANCE, THREADS_DONE_UTTERANCE } from "./runner";
 export type { TurnResult, RunnerClock, RunnerOptions } from "./runner";
 export { Session } from "./session";
 export { AnswerLogBuilder, ANSWER_LOG_SCHEMA_VERSION } from "./answerlog";

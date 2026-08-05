@@ -29,8 +29,18 @@ import { Session } from "./session";
 import { LLMError } from "./types";
 import type { ActionKind, Identity, LiveDecision, LLMProvider, SessionBrief } from "./types";
 
+/** The final sign-off spoken once the person has already tapped "End & save". */
 export const CLOSING_UTTERANCE =
   "That's really helpful — thank you. I'll take some time to make sense of all this before we next talk. Have a good one.";
+
+/**
+ * Spoken the moment the runner runs out of open threads on its own, BEFORE the person has tapped
+ * "End & save". Unlike `CLOSING_UTTERANCE`, this names the button explicitly — the session isn't
+ * actually saved until they tap it, and a purely conversational sign-off here is exactly what let a
+ * tester believe they were done and walk away without saving.
+ */
+export const THREADS_DONE_UTTERANCE =
+  'That\'s really helpful — I think we\'ve covered everything for today. Please tap "End & save" below now so your answers are saved before you go.';
 
 export interface TurnResult {
   /** What the agent says next (after the guard layer). */
@@ -196,7 +206,7 @@ export class Runner {
       };
     }
     this.session.currentThreadId = null;
-    return { utterance: CLOSING_UTTERANCE, action: "close" };
+    return { utterance: THREADS_DONE_UTTERANCE, action: "close" };
   }
 
   /** One live model call → a validated `LiveDecision`. */

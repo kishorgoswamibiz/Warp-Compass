@@ -104,6 +104,10 @@ export function SessionScreen({
   const [micState, setMicState] = useState<MicState>("idle");
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const [view, setView] = useState<View>("stage");
+  // The runner ran out of open threads on its own (THREADS_DONE_UTTERANCE was just spoken) but the
+  // person hasn't tapped "End & save" yet — nothing is actually saved until they do. Surfaces a
+  // nudge banner and highlights the button so this can't be missed the way it was before.
+  const [botSignaledClose, setBotSignaledClose] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
   const [gesture, setGesture] = useState<BotGesture | null>(null);
@@ -239,9 +243,10 @@ export function SessionScreen({
       reactionTimer.current = setTimeout(() => setReaction(null), REACTION_MS);
       if (r.gesture) playGesture(r.gesture, r.gesture === "note" ? 3000 : 2200);
       try {
-        const { utterance } = await runner.respond(t);
+        const { utterance, effectiveAction } = await runner.respond(t);
         setMessages((m) => [...m, { who: "agent", text: utterance }]);
         setStatus("active");
+        if (effectiveAction === "close") setBotSignaledClose(true);
         void speak(utterance).then(() => {
           if (lastAnswerWasVoice.current && micSupported) void startMic(true);
         });
@@ -337,6 +342,22 @@ export function SessionScreen({
 
   // What the PERSON contributed — a seeded identity entry isn't an answer they gave (P13 §4.1).
   const entryCount = runnerRef.current?.log.answerCount() ?? 0;
+  const unsavedAnswers = entryCount > 0 && syncState !== "pushed" && syncState !== "exists";
+
+  // Closing the tab / refreshing / navigating away is exactly how the reported incident happened:
+  // the person had answers on the record but never triggered the push, so nothing was saved. The
+  // in-app "End & save" nudge (below) can't help once the tab is already closing, so this is the
+  // last line of defence — a native browser confirmation, not something we can silently skip.
+  useEffect(() => {
+    if (!unsavedAnswers) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [unsavedAnswers]);
+
   const busy = status !== "active" || micState === "transcribing";
   // The Answer Log is still in flight to the brain. Leaving now would unmount the screen mid-push:
   // the person would never learn whether it landed, and on a failure they'd never be offered the
@@ -498,6 +519,12 @@ export function SessionScreen({
         </div>
       ) : (
         <div className="wc-composer">
+          {botSignaledClose && (
+            <p className="wc-nudge">
+              You've covered everything for today — tap <strong>"End &amp; save"</strong> below to
+              save your answers.
+            </p>
+          )}
           <div className="wc-inputwrap">
             <textarea
               ref={inputRef}
@@ -558,7 +585,11 @@ export function SessionScreen({
                 ⏸ Pause
               </button>
             )}
-            <button className="wc-ghost" onClick={endSession} disabled={busy}>
+            <button
+              className={`wc-ghost${botSignaledClose ? " wc-nudge-btn" : ""}`}
+              onClick={endSession}
+              disabled={busy}
+            >
               End &amp; save
             </button>
           </div>

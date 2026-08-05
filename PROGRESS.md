@@ -309,6 +309,35 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 ## Handoff log (append-only · newest on top)
 
+### 05 Aug 2026 · agent:sonnet-pwa-fix — PWA bugfix only (no phase): a tester can no longer finish without saving
+
+**Did.** Owner reported: one test user said "yes I tested" but never tapped **End & save**, so their
+answers never reached the brain. Root cause: reaching the natural end of the interview was purely
+conversational — the wrap-up line (shared with the post-tap sign-off as one `CLOSING_UTTERANCE`
+constant) never named the button, and the composer with the still-unclicked button just sat there
+looking like any other turn. Split it into two: `THREADS_DONE_UTTERANCE` (runner ran out of threads on
+its own, button not yet tapped) now explicitly says `tap "End & save" below now`; `CLOSING_UTTERANCE`
+(spoken only after the tap) keeps the plain goodbye. `SYSTEM_PROMPT`'s own `close` action definition
+got the same instruction, for the (currently unreachable) path where the model emits `close` directly.
+On the UI side (`SessionScreen.tsx`): the moment the runner signals `close`, a green nudge banner
+appears above the composer and the *End & save* button gets a pulsing highlight (`.wc-nudge`,
+`.wc-nudge-btn` in `theme.css`, reusing the existing `wc-pulse` keyframe); and a `beforeunload` handler
+now fires a native "leave site?" confirmation if the tab is closed/refreshed while there are captured
+answers that never reached `pushed`/`exists` — the last line of defence once someone tries to walk away
+mid-session.
+
+**Gotcha worth keeping.** A conversational sign-off is not a save confirmation. When the action that
+actually persists data is a separate manual step, the instruction to take it has to survive someone not
+reading carefully — a line buried in friendly chat copy isn't enough; it needs a UI element that's
+still there when they look up, plus a hard backstop (`beforeunload`) for the case where they don't look
+up at all.
+
+**Next.** Unchanged — the queue is still P16b. `ISSUES.md` WC-15 / WC-R10; **WC-R10's *Fixed in* still
+says *(sha pending)*** — stamp it with this commit's sha, same as `1243f17` did for WC-R9.
+Files: `pwa/src/runner/runner.ts`, `pwa/src/runner/prompts.ts`, `pwa/src/runner/index.ts`,
+`pwa/src/screens/SessionScreen.tsx`, `pwa/src/styles/theme.css`. `npx vitest run` → 69 pass;
+`npm run typecheck` clean.
+
 ### 05 Aug 2026 · agent:opus-pwa-fix — PWA bugfix only (no phase): the closing screen no longer lets you leave mid-push
 
 **Did.** Owner found it in live testing: on the End & save screen, **Done** was tappable while the

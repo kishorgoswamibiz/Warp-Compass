@@ -253,6 +253,22 @@ body {
   cursor: not-allowed;
 }
 
+.wc-nudge {
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  background: rgba(21, 201, 91, 0.1);
+  border: 1px solid rgba(21, 201, 91, 0.35);
+  border-radius: var(--wc-radius);
+  color: var(--wc-ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.wc-nudge-btn {
+  border-color: var(--wc-green);
+  color: var(--wc-green-deep);
+  animation: wc-pulse 1.4s ease-in-out infinite;
+}
+
 /* ── Voice (Phase 7) ──────────────────────────────────────────────────────── */
 .wc-mic {
   appearance: none;

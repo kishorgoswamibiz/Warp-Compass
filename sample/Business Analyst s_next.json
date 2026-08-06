@@ -1,0 +1,120 @@
+{
+  "session_id": "s_next",
+  "persona_id": "kishor-goswami-business-analysis-specia-c3ab",
+  "participant_id": "kishor-goswami-business-analysis-specia-c3ab",
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "thread_id": "thread.cross_conflict.act.create-project-timeline",
+      "kind": "guided",
+      "agent_utterance": "Welcome back, Kishor. I've heard different accounts of 'Create Project Timeline' — can you walk me through how it actually works for you?",
+      "raw_answer": "Well, the project timeline is not, uh, my job. It is something that the project manager does, the delivery specialist",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:55:58.213Z"
+    },
+    {
+      "thread_id": "thread.cross_conflict.act.create-project-timeline",
+      "kind": "guided",
+      "agent_utterance": "You also wear the Delivery Specialist hat — when you're in that role, do you create the project timeline?",
+      "raw_answer": "No, no. I do not create the project timeline, so how am I in the delivery specialist hat? I don't do that. As I told you",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:56:34.265Z"
+    },
+    {
+      "thread_id": "thread.cross_conflict.art.project-timeline",
+      "kind": "guided",
+      "agent_utterance": "Understood, that's the project manager's territory. Now, about the 'Project Timeline' itself — I've heard different accounts. How does it actually work for you?",
+      "raw_answer": "So project timeline, you better should ask a delivery specialist",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:57:11.228Z"
+    },
+    {
+      "thread_id": "thread.handoff_confirm.act.assign-feedback-to-developers.role.technical-specialist",
+      "kind": "guided",
+      "agent_utterance": "Got it — I'll check with the delivery specialist on that. Now, the Quality Assurance Head says they hand 'Assign Feedback to Developers' to you — do they?",
+      "raw_answer": "Yeah, sometimes. So the, if, if there are some issues found by the QA, then it generally, uh, is documented by them, and then I also validate it. And I talk to my, uh, solution architect and my development team, and then they review it and fix those bugs.",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:57:56.896Z"
+    },
+    {
+      "thread_id": "thread.handoff_confirm.act.assign-feedback-to-developers.role.technical-specialist",
+      "kind": "guided",
+      "agent_utterance": "When QA hands you those documented issues, is anything usually missing or does something need redoing?",
+      "raw_answer": "It's both the scenarios. So sometimes they might have checked it in a different way, which was not valid, so that is what they thought it's a bug. Sometimes it's actually some kind of bug, and we need to do some redoing, like to fix those bug. So it's done by the developers",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:58:43.184Z"
+    },
+    {
+      "thread_id": "thread.handoff_self.act.hand-over-documents-to-project-manager.role.delivery-specialist",
+      "kind": "guided",
+      "agent_utterance": "Got it. You also wear the Delivery Specialist hat — when you switch to it, what happens with handing documents to the project manager?",
+      "raw_answer": "I told you I do not act as a delivery specialist. Why you're not trying to understand?",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:59:22.812Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.create-flow-diagram-documents.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "I apologize, Kishor — I misunderstood. Let's set that aside. Once 'Create Flow Diagram Documents' is done, who picks it up next?",
+      "raw_answer": "Uh, the flow diagram document is generally internally, I explain it to my team that this is how the system has to work. So no one picks it. It's just that, yeah, one thing is there, we also send it to client for their sign off. Like this is what the to-be process going to be",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:00:03.771Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.create-flow-diagram-documents.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Got it — you send it to the client for sign off. How do you pass it to them — through a system or email?",
+      "raw_answer": "Yeah, we generally email to them",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:00:22.312Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.create-user-story-documents.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Now, once 'Create User Story Documents' is done, who picks them up next?",
+      "raw_answer": "Well, the user stories are created, then it goes to the solution architect. I had replied in my previous sessions. Mm, and that then the solution architect actually checks it and, uh, gives the technical solutions for the user stories and the efforts required in those user stories",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:01:07.569Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.conduct-discovery-and-demos.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Another Business Analysis Specialist described 'Conduct Discovery and Demos' — we never captured who picks it up afterwards. How does that go for you?",
+      "raw_answer": "So the discovery sessions I take care of along with the solution architect, and, uh, this is in the initial of the project and demos I do it. So what is there to pick up after the demo? Because once demo is done, it is done. If there are some feedbacks, we take those feedbacks and review it and implement those feedbacks",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:02:36.250Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.conduct-granular-discovery-sessions.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Another Business Analysis Specialist described 'Conduct Granular Discovery Sessions' — we never captured who picks it up afterwards. How does that go for you?",
+      "raw_answer": "Well, after the discovery sessions, I had explained in my previous message, then I create the user story documents. After those user story documents, the flow diagrams, and then I give it to the solution architect. And the solution architect gives the technical solution. I've explained it.",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:03:14.238Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.functional-documentation.trigger",
+      "kind": "guided",
+      "agent_utterance": "Another Business Analysis Specialist described 'Functional Documentation' — we never captured what kicks it off. How does that part go when you do it?",
+      "raw_answer": "Actually, it's not a separate document. Uh, they must be talking about the user story document itself. So the BA does the functional part of the like module, sub-module, user stories, user acceptance criteria. So the BA does these things, and then the next columns like technical solution, technical assumptions, those are done by the SA, the technical part of it. But it is the user story document itself",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:04:07.590Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.documentation.trigger",
+      "kind": "guided",
+      "agent_utterance": "Another Business Analysis Specialist described 'Documentation' — we never captured what kicks it off. How does that go for you?",
+      "raw_answer": "Did I not tell you that I document the user stories?",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:05:11.694Z"
+    },
+    {
+      "thread_id": "orphan.thread.missing_field.act.approve-effort-estimation.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Understood — that's the user story work you already explained. One more: who picks up 'Approve Effort Estimation' once it's approved?",
+      "raw_answer": "Uh, it's enough for this session. We'll come back next session",
+      "audio_ptr": null,
+      "ts": "2026-08-06T02:06:29.210Z"
+    }
+  ]
+}

@@ -6,11 +6,13 @@ pipeline — do not edit by hand.
 
 | Type | Count | Folder |
 |---|---|---|
-| Role | 10 | [roles/](roles/index.md) |
-| Activity | 0 | [activities/](activities/index.md) |
-| System | 0 | [systems/](systems/index.md) |
-| Artifact | 0 | [artifacts/](artifacts/index.md) |
-| Event | 0 | [events/](events/index.md) |
+| Stage | 13 | [stages/](stages/index.md) |
+| Role | 12 | [roles/](roles/index.md) |
+| Activity | 49 | [activities/](activities/index.md) |
+| Objective | 0 | [objectives/](objectives/index.md) |
+| System | 1 | [systems/](systems/index.md) |
+| Artifact | 13 | [artifacts/](artifacts/index.md) |
+| Event | 3 | [events/](events/index.md) |
 | ApprovalPoint | 0 | [approval-points/](approval-points/index.md) |
 | Rule | 0 | [rules/](rules/index.md) |
 | Problem | 0 | [problems/](problems/index.md) |

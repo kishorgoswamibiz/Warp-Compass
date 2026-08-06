@@ -1,0 +1,128 @@
+{
+  "session_id": "s_next",
+  "persona_id": "chandu-bhai-solution-architect-6dc3",
+  "participant_id": "chandu-bhai-solution-architect-6dc3",
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "thread_id": "thread.handoff_self.act.assign-feedback-to-developers.role.technical-specialist",
+      "kind": "guided",
+      "agent_utterance": "Welcome back, Chandu. You wear both hats here — when you switch from your Quality Assurance Head hat to your Technical Specialist hat, what do you do with 'Assign Feedback to Developers'?",
+      "raw_answer": "No, no, I do not do quality assurance and all that. I am not doing the-- SA does not do anything in quality assurance and quality head. I just check the development of my project. Whatever project I am working on, I check the development on my project, nothing else. So there's a different team for, uh, QA, quality assurance, not me. But before I give any, uh, project done, I need to verify if my team has done fine work or not, right? So my work is only as an SA, but, uh, I do check the code quality and function quality like that. I do not do an quality assurance check.",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:45:42.276Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.monitor-development-progress.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Got it — QA is a separate team, and you verify code quality yourself as SA. So once 'Monitor Development Progress' is done, who picks it up next?",
+      "raw_answer": "So once the development progress is done, then basically the BA also tests it, the functionalities, then it go, goes to the QA team",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:46:11.173Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.monitor-development-progress.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "So BA tests it next, then QA — how do you hand it off to them, through a system or email?",
+      "raw_answer": "Um, so the-- in the project timeline, there are some dates. So, um, be-- like dates and milestones defined, right? That, uh, at a specific date, development should be completed, and specific date it has to be handed over to QA team. So it is understood from that timeline as well, and also we tag them on Slack, like it is available for testing. The project manager actually manages all of it.",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:47:05.130Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.check-changesets.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "You mentioned checking code quality yourself — after you check the changesets, who picks that up next?",
+      "raw_answer": "So the code quality and the change sets, like it's a parallel thing, right? So first I do the code quality check, and then I check for the change sets when deployment is happening. Um, so it is done by the developers. Um, I ask them to do everything, then I review everything. Then I just, uh, give them a go ahead that fine, deploy it",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:48:04.316Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.check-changesets.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "So you give the developers a go-ahead — is that through Slack, email, or something else?",
+      "raw_answer": "Yeah, it's on Slack because it's internal team discussions, right?",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:48:29.749Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.code-review-and-team-oversight.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "After you do the code review and team oversight, who takes it from there next?",
+      "raw_answer": "I mean, it's a continuous process. People parallelly take care of other things, like the BA would be testing and validating the functionalities, the project manager reviews the project timeline, everything. So it's a parallel thing till it goes to UAT and production",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:49:13.457Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.perform-deployment.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "After you give the go-ahead to deploy, who picks up the deployment from there?",
+      "raw_answer": "The development team itself, uh, they only do the deployment because I have my developers. I have-- once I have reviewed, then I ask them, \"Oh, fine, go ahead and deploy it.\" So the development team, the same people who have developed it, they will only deploy it",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:49:53.446Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.perform-deployment.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Got it — after the deployment itself is done, who picks it up next?",
+      "raw_answer": "If it is UAT, then some testing will happen. If it is production, then yeah, we, uh, hand it over to client after the production deployment for them to use",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:50:24.918Z"
+    },
+    {
+      "thread_id": "thread.missing_field.act.code-review.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "And when your own code review is done — not team oversight, just the review — who picks that up next?",
+      "raw_answer": "After the code review, if there are some changes, then the developers do it. Or if there are no changes required, then it goes for deployment, like UAT deployment or production as whatever it is",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:51:19.429Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.discovery-session.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Another Business Analysis Specialist described 'Discovery Session', but we never captured who picks it up afterwards. How does that part go when you do it?",
+      "raw_answer": "Can you rephrase this question? I could not understand what you're trying to ask",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:51:57.876Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.discovery-session.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Sure – after you meet with a client to understand their needs, what's the next thing that happens – who picks it up?",
+      "raw_answer": "So generally, uh, we are in a call, so I do not meet a client. You're talking about which phase? Uh, like pre-sales or discovery?",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:52:37.243Z"
+    },
+    {
+      "thread_id": null,
+      "kind": "free_narration",
+      "agent_utterance": "Great question – I mean the discovery phase, before any proposal. After you finish that call, who picks it up next?",
+      "raw_answer": "No, discovery phase comes after the pre-sales. Once it is converted to project, then it, uh, then the very first stage in the discovery phase-- Sorry, the very first stage in the project phase is discovery. So there's no question of proposal in this phase. Proposal was already made during the pre-sales",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:53:26.362Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.discovery-session.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "Got it — discovery is the first project phase, no proposal involved. So after that discovery call wraps up, who picks it up from you next?",
+      "raw_answer": "In the discovery phase, I generally try to, mm, write the solutions, and when solutions are done, uh, then it goes to the project manager for project timelines and milestone",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:54:15.502Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.give-demo.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "When you demo the solution to the client, who picks it up from there next?",
+      "raw_answer": "No, I do not demo a solution to the client. A BA does that in the pre-sales or during the project, but the BA does that generally",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:54:49.187Z"
+    },
+    {
+      "thread_id": "role.thread.missing_field.act.send-proposal.next_handoff",
+      "kind": "guided",
+      "agent_utterance": "The BA owns demos, got it. Another Account Management Specialist described 'Send Proposal' — how does that part go when you're involved?",
+      "raw_answer": "I guess this is enough for today. We'll come back later",
+      "audio_ptr": null,
+      "ts": "2026-08-06T01:55:22.413Z"
+    }
+  ]
+}

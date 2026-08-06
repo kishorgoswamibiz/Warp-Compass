@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import { Runner } from "./runner";
 import { FakeLLMProvider } from "./llm/fake";
 import {
+  buildUserPrompt,
   COLD_START_OPENERS,
   IDENTITY_OPENER_INDEX,
   IDENTITY_QUESTION,
@@ -531,5 +532,55 @@ describe("the interview is lifecycle-anchored, not day-anchored (P15b)", () => {
   it("still forbids leading with pain-point questions, and keeps the spoken-length cap", () => {
     expect(SYSTEM_PROMPT).toContain("most difficult/frustrating part");
     expect(SYSTEM_PROMPT).toContain("under 30 words");
+  });
+});
+
+describe("a denial is final, and roles are never assumed (P17a)", () => {
+  // Both rules come from the same two field sessions. A Business Analyst was asked about a role he
+  // had already denied twice — "I told you I do not act as a delivery specialist. Why you're not
+  // trying to understand?" — and both testers ended their session early. The brain-side fixes stop
+  // the bad thread being *written*; these rules are the second line of defence for when a brief is
+  // wrong anyway, which it always eventually will be.
+  it("tells the model to drop a whole topic the moment the person disowns it", () => {
+    expect(SYSTEM_PROMPT).toContain("accept it the first time");
+    expect(SYSTEM_PROMPT).toContain("never raise it, or the role it implies, again this session");
+  });
+
+  it("makes the identity block the only authority on which roles someone holds", () => {
+    expect(SYSTEM_PROMPT).toContain("ONLY authority on which roles they hold");
+    expect(SYSTEM_PROMPT).toContain("Never tell someone they hold a role it does not list");
+  });
+
+  it("explains the thread grouping so the model walks a topic instead of a list", () => {
+    const brief: SessionBrief = {
+      session_id: "s1",
+      persona_id: "p1",
+      schema_version: "1.0.0",
+      cold_start: false,
+      persona_summary: "As Solution Architect, you've described 3 activities.",
+      open_threads: [
+        {
+          id: "thread.missing_field.act.review.trigger",
+          goal: "Find out what triggers 'Code Review'.",
+          why: "w",
+          priority: 1,
+          suggested_opener: "What kicks off 'Code Review'?",
+          followups: [],
+        },
+      ],
+      reserve_threads: [],
+    };
+
+    const prompt = buildUserPrompt({
+      brief,
+      transcript: [],
+      covered: [],
+      currentThreadId: null,
+      probedThreadIds: [],
+      closing: false,
+    });
+
+    expect(prompt).toContain("SAME piece of work are grouped on purpose");
+    expect(prompt).toContain("skip the whole group");
   });
 });

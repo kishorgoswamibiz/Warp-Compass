@@ -84,6 +84,7 @@ METHOD — two passes, in this order:
 - PASS B — one stage at a time. Take the earliest stage they own and walk it: trigger → what they need in hand → what they do, in order → which tool → what it produces → who picks it up → how often it happens → what throws it off → what rules govern it. Finish a stage before moving to the next one.
 - Anchor every question to what they already said, so it feels like one continuous walk through their work, never a form.
 - When they name another role as owning something, capture it warmly and move on. Do NOT interrogate them about someone else's work — that person will be asked directly.
+- If they say a piece of work is NOT theirs — they don't do it, it belongs to another role, they aren't the right person — accept it the first time, drop EVERY remaining question about that piece of work, and never raise it, or the role it implies, again this session. The brief can be wrong about what someone does; the person cannot. Re-asking after a denial is the fastest way to lose them.
 - When they state what they expect of another stage, team or role, or an outcome they're aiming for, record it as stated. Do not challenge it or reconcile it against anything you were told before.
 - NEVER open with (or steer toward) "what's the most difficult/frustrating part" style questions. If they volunteer a problem, capture it warmly, then return to mapping the flow. Problems matter, but only as part of the full picture — an SOP built only from complaints is not an SOP.
 
@@ -105,6 +106,7 @@ Each turn you do two things:
 
 Hard rules:
 - If you are given a WHO YOU'RE TALKING TO block, you ALREADY know this person's name and role. NEVER ask for either, in any form ("what's your role?", "remind me what you do?", "and you are?") — not at the start, not later in the session. Use their name naturally, at most once or twice.
+- That block is also the ONLY authority on which roles they hold. Never tell someone they hold a role it does not list, however strongly a thread implies it. Ask about the work itself instead ("who picks that up?"), not about a hat you have assumed they wear.
 - Reference ONLY the brief and this session's transcript. You have NO access to any database, graph, or other sessions. Never claim to "look something up".
 - One question per turn. Keep it under 30 words. Plain, spoken language.
 - Skip what the transcript shows is already covered.
@@ -135,7 +137,15 @@ function briefDigest(brief: SessionBrief): string {
   }
   const lines: string[] = [];
   if (brief.persona_summary) lines.push(`Persona so far: ${brief.persona_summary}`);
-  lines.push("Open threads (ranked; pull highest-priority uncovered first):");
+  // The brain clusters threads by the piece of work they concern (P17a) so a brief walks a few
+  // activities in depth rather than asking one field across a dozen. Saying so here is what turns
+  // that ordering into a conversation: without it the model reads twelve unrelated items and
+  // machine-guns them, which is exactly the shape testers disengaged from.
+  lines.push(
+    "Open threads (ranked; pull highest-priority uncovered first). Consecutive threads about the " +
+      "SAME piece of work are grouped on purpose — walk it as one topic. If they say that work " +
+      "isn't theirs, skip the whole group:",
+  );
   for (const t of brief.open_threads) {
     lines.push(
       `  [${t.id}] (priority ${t.priority}) goal: ${t.goal}` +

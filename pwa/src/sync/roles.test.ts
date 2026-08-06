@@ -23,9 +23,11 @@ describe("role registry parity with contracts/roles.json", () => {
     expect(ROLE_REGISTRY.map((r) => ({ ...r, aliases: [...r.aliases] }))).toEqual(contract.roles);
   });
 
-  it("exposes the 10 titles for the onboarding chips", () => {
+  it("exposes every contract title for the onboarding chips, in contract order", () => {
     expect(ROLE_NAMES).toEqual(contract.roles.map((r) => r.canonical_name));
-    expect(ROLE_NAMES).toHaveLength(10);
+    // Pinned so adding a chip stays a deliberate two-file change. 11 since "Solutions Lead"
+    // (06 Aug 2026); the parity assertion above is what actually guards against drift.
+    expect(ROLE_NAMES).toHaveLength(11);
   });
 
   it("carries the owner's decisions: Sales is an AMS alias, CEO and COO are roles", () => {

@@ -59,11 +59,15 @@ def _edge(etype, a, b, persona: str = "persona.ba") -> Edge:
 # --- the contract itself ----------------------------------------------------------------------
 
 
-def test_registry_holds_the_ten_roles_the_owner_specified():
+def test_registry_holds_the_roles_the_owner_specified():
+    # Order is the onboarding chip order and is asserted verbatim, so adding a role is a deliberate
+    # two-file change (contract + `pwa/src/sync/roles.ts`) rather than something that drifts.
+    # "Solutions Lead" added 06 Aug 2026 at the owner's request.
     assert REG.canonical_names == (
         "Business Analysis Specialist",
         "Technical Specialist",
         "Solution Architect",
+        "Solutions Lead",
         "Delivery Specialist",
         "Account Management Specialist",
         "Quality Assurance Head",

@@ -18,6 +18,11 @@
       "aliases": ["SA", "Architect"]
     },
     {
+      "slug": "role.solutions-lead",
+      "canonical_name": "Solutions Lead",
+      "aliases": ["Solution Lead", "SL"]
+    },
+    {
       "slug": "role.delivery-specialist",
       "canonical_name": "Delivery Specialist",
       "aliases": ["Project Manager", "PM", "DS", "Delivery Manager"]

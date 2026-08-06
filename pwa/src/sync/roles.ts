@@ -38,6 +38,14 @@ export const ROLE_REGISTRY: readonly RoleEntry[] = [
     aliases: ["SA", "Architect"],
   },
   {
+    slug: "role.solutions-lead",
+    canonical_name: "Solutions Lead",
+    // Deliberately narrow (ADR #33): a bare "Lead" would swallow every "dev lead" / "team lead"
+    // mention and silently merge two real roles, which is the one failure an alias table can cause
+    // that is worse than a missing synonym.
+    aliases: ["Solution Lead", "SL"],
+  },
+  {
     slug: "role.delivery-specialist",
     canonical_name: "Delivery Specialist",
     aliases: ["Project Manager", "PM", "DS", "Delivery Manager"],

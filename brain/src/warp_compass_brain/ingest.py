@@ -15,7 +15,9 @@ from .graphstore.base import GraphStore
 from .models import (
     ConfidenceStatus,
     Edge,
+    EdgeType,
     NodeCard,
+    NodeType,
     Provenance,
 )
 from .ontology import Ontology
@@ -24,6 +26,36 @@ from .resolve import Resolver
 from .roles import REGISTRY_SAID_BY
 from .slugs import mint_slug
 from .vectorindex.base import VectorIndex
+
+
+def _candidate_context(cand, extraction) -> str:
+    """The proposed node's *"[performed by X; in stage Y]"* line, read off its own batch (P17b).
+
+    `Resolver.node_context` can only describe nodes that are already in the graph; a candidate is
+    by definition not, so its stage and performer have to come from the sibling refs the extractor
+    emitted alongside it. Without this the adjudicator sees the discriminating evidence for every
+    existing card and none for the thing it is judging — which is worse than symmetric ignorance,
+    because "no stage given" then reads as a difference.
+    """
+    if cand.type is not NodeType.ACTIVITY:
+        return ""
+    names = {n.ref: n.canonical_name for n in extraction.nodes}
+    performers = sorted(
+        names[r.from_ref]
+        for r in extraction.relations
+        if r.type is EdgeType.PERFORMS and r.to_ref == cand.ref and r.from_ref in names
+    )
+    stages = sorted(
+        names[r.to_ref]
+        for r in extraction.relations
+        if r.type is EdgeType.PART_OF and r.from_ref == cand.ref and r.to_ref in names
+    )
+    bits = []
+    if performers:
+        bits.append(f"performed by {', '.join(performers)}")
+    if stages:
+        bits.append(f"in stage {', '.join(stages)}")
+    return f" [{'; '.join(bits)}]" if bits else ""
 
 
 class IngestSummary(BaseModel):
@@ -80,7 +112,9 @@ class Ingestor:
                 account=cand.description,
             )
             retrieved = self._resolver.retrieve(cand)
-            adj = self._resolver.adjudicate(cand, retrieved)
+            adj = self._resolver.adjudicate(
+                cand, retrieved, cand_context=_candidate_context(cand, extraction)
+            )
             decision = self._gate.decide(cand, retrieved, adj)
             self._record_pending(decision, cand)
 

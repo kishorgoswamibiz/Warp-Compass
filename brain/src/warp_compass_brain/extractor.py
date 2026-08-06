@@ -33,6 +33,21 @@ Rules:
 - Use ONLY the allowed node types and edge types. Never invent types.
 - Each node needs a unique "ref" (n1, n2, ...) used by relations.
 - Prefer FEWER, well-formed nodes over many noisy ones.
+- ONE ANSWER USUALLY DESCRIBES ONE ACTIVITY. Do NOT split a single description of one piece of
+  work into a chain of near-identical Activities. "First I check the code quality, then I check
+  the changesets, then I review everything and give the go-ahead" is ONE activity described in
+  passing detail, not three — emit one Activity and put the other phrasings in aliases. Split into
+  separate Activities only when the answer places them in DIFFERENT lifecycle stages, or has them
+  done by DIFFERENT roles, or separates them in time ("that happens weeks later"). The same test
+  applies to Roles: do not mint a new Role for a function an existing role already covers
+  ("gives the go-ahead to deploy" is the reviewer you already emitted, not a new Deployment
+  Approver).
+  ⚠ THIS RULE IS ABOUT NEAR-DUPLICATE ACTIVITIES AND ROLES, NOTHING ELSE. It is never a reason to
+  emit fewer Objectives, Problems, Stages, Systems, Artifacts, Events, Rules or ApprovalPoints. A
+  different node TYPE is not a duplicate — it records something no Activity node carries, and
+  dropping it deletes data permanently. In particular an Objective and the Activity it is about are
+  BOTH required (see EXPECTATIONS AND GOALS below); emitting only the Activity is a loss, not a
+  tidy-up.
 - Be an ACTIVE EDITOR, never a transcriber: distill what was said into clean factual
   statements. Never copy conversational text ("well, usually I kind of...") into any field.
 - canonical_name is a short normalized name (2-4 words); aliases are the OTHER keywords or

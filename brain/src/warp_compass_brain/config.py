@@ -30,8 +30,18 @@ class Settings(BaseSettings):
     deepseek_model_batch: str = "deepseek-v4-pro"
     deepseek_model_live: str = "deepseek-v4-flash"
 
-    # --- Resolve / create-gate tuning (Phase 2) ---
-    similarity_ceiling: float = 0.86  # >= this vs an existing node overrules an LLM "new" verdict
+    # --- Resolve / create-gate tuning (Phase 2; retuned P17b, ADR #41) ---
+    # >= this vs an existing node OVERRULES an LLM "new" verdict. Raised 0.86 -> 0.90 on measured
+    # evidence, which is the opposite of what phase-17 originally planned (it proposed ~0.79).
+    # Pairwise cosine over the live graph, 06 Aug 2026: real duplicates score 0.69-0.87 and
+    # genuinely DIFFERENT work scores 0.78-0.87 — the same band, so no threshold separates them.
+    # Worse, at 0.86 the highest-scoring pair in the whole graph was a WRONG merge waiting to
+    # happen: create-project-timeline (pre-sales) vs manage-project-timelines (project-delivery) at
+    # 0.874. What actually separates them is the performing role and the lifecycle stage, so that
+    # evidence now goes to the adjudicator (`Resolver.node_context`) and this stays a conservative
+    # backstop for near-identical restatements only. LOWER IT AND YOU DELETE REAL PROCESS
+    # DISTINCTIONS — re-measure before touching it (scratch probe in phase-17 §5).
+    similarity_ceiling: float = 0.90
     retrieval_top_k: int = 8          # candidate cards shown to the adjudicator
 
     # --- Local embeddings + vector store (Phase 2) ---

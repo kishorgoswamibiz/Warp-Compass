@@ -93,3 +93,28 @@ def test_extract_still_calls_the_model_for_real_speech():
     llm = CountingLLM()
     Extractor(llm).extract("The analyst writes the BRD.")
     assert llm.calls == 1
+
+
+# --- P17b: the anti-splitting rule must not become a general "emit less" instruction -------------
+
+
+def test_anti_splitting_rule_is_scoped_and_cannot_suppress_other_node_types():
+    """The regression this guard exists for, found by rebuilding the graph (06 Aug 2026).
+
+    P17b added "ONE ANSWER USUALLY DESCRIBES ONE ACTIVITY" immediately after "Prefer FEWER,
+    well-formed nodes" — two emphatic minimise-instructions back to back, near the top of the rule
+    list. The replay that followed took Activities 62 -> 49 (the goal) but also took **Objectives
+    4 -> 0 and ApprovalPoints 1 -> 0**, losing real content: "Team Work Quality Verified Before
+    Project Completion", "Understand Complete Process".
+
+    Objectives are not incidental — ADR #32 makes the gap between what one person expects and what
+    another describes the finding the engagement sells, and the extractor prompt is the one place
+    that can quietly delete it. So the scope of the anti-splitting rule is pinned here.
+    """
+    from warp_compass_brain.extractor import _SYSTEM
+
+    assert "ONE ANSWER USUALLY DESCRIBES ONE ACTIVITY" in _SYSTEM
+    assert "THIS RULE IS ABOUT NEAR-DUPLICATE ACTIVITIES AND ROLES, NOTHING ELSE" in _SYSTEM
+    assert "never a reason to\n  emit fewer Objectives" in _SYSTEM
+    # The rule it must not be allowed to override still has to be present to be overridden.
+    assert "EXPECTATIONS AND GOALS ARE DATA, NOT NOISE" in _SYSTEM

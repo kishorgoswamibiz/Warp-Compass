@@ -551,6 +551,122 @@ def cmd_reset_engagement(args) -> int:
     return 0
 
 
+def cmd_rebuild_graph(args) -> int:
+    """Re-derive the whole graph from the Answer Logs (P17b).
+
+    The Answer Log is the immutable source of truth and the graph is derived data
+    (`answer-log.schema.json`, ADR #4), so improving extraction/resolution and replaying is the
+    supported way to fix a polluted graph — never hand-editing it (AGENTS.md).
+
+    **Not `reset-engagement`.** That wipes participant folders and `_retired.json` too, which would
+    destroy the very logs this reads. This touches the GRAPH and local derived state only: every
+    profile, answer log, brief and archive is left exactly as it was, including `ingested_logs` —
+    which stays correct, because after a full replay every listed log genuinely is ingested.
+    """
+    import shutil
+    from pathlib import Path
+
+    from .bus import FolderBus
+    from .lifecycle import all_answer_entries
+    from .roles import load_roles, seed_roles
+
+    s = get_settings()
+    bus = FolderBus(args.bus or s.bus_root)
+    graph_root = resolve_graph_root(s)
+    entries = all_answer_entries(bus)
+    sources = sorted({e.source for e in entries})
+
+    print(f"bus   : {bus.root}")
+    print(f"graph : {graph_root}")
+    print(f"logs  : {len(sources)} ({len(entries)} answers)")
+    for src in sources:
+        print(f"          {src}")
+
+    if not entries:
+        print("\nNothing to replay — refusing to delete a graph with no source to rebuild it from.")
+        return 1
+
+    if args.dry_run:
+        print("\n(dry run — nothing changed. Re-run with --yes to apply.)")
+        return 0
+    if not args.yes:
+        print(
+            "\nrefusing to rebuild without --yes.\n"
+            f"This DELETES {graph_root} and the local vector/queue state, then replays the "
+            f"{len(entries)} answers above through the extractor (paid DeepSeek calls, roughly "
+            f"{max(1, len(entries) * 45 // 60)} minutes). The bus is not touched.\n"
+            "It is ALL-OR-NOTHING: there is no resume, so an interrupted run leaves a partial "
+            "graph and you must re-run from the start. Back up the graph folder first (or commit "
+            "it) if the current one still has value. Preview with --dry-run.",
+            file=sys.stderr,
+        )
+        return 1
+
+    before = _node_counts(s)
+    for path in (graph_root, s.vector_db_path, s.quarantine_path, s.pending_taxonomy_path):
+        p = Path(path)
+        if p.is_dir():
+            shutil.rmtree(p)
+        elif p.is_file():
+            p.unlink()
+    print("\nCleared graph + vector index + review queues.")
+
+    # Seed the role registry FIRST. Answers ingested before it mint role nodes under whatever name
+    # the extractor picked, and the aliases then arrive too late to stop "the PM" forking away from
+    # "Delivery Specialist" (ADR #33) — the same ordering `seed-roles` documents for a first round.
+    graph = _open_graph(s)
+    try:
+        seeded = seed_roles(graph, load_roles(), now=_now())
+    finally:
+        graph.close()
+    print(f"Seeded {len(seeded.created)} registry roles.")
+
+    graph, ingestor = _build_ingestor(s)
+    failed = 0
+    try:
+        for i, e in enumerate(entries, start=1):
+            # Flush every line. This replay is one paid LLM call per answer and runs for tens of
+            # minutes; without flushing, a redirected or piped run shows NOTHING until it exits, so
+            # an interrupted rebuild leaves no record of how far it got. (Learned the hard way —
+            # a killed run cost ~25 minutes of calls and produced an empty log.)
+            print(f"  [{i}/{len(entries)}] {e.source} {e.ts}", flush=True)
+            try:
+                ingestor.ingest_answer(
+                    e.raw_answer,
+                    persona_id=e.persona_id,
+                    session_id=e.session_id,
+                    ts=e.ts or _now(),
+                )
+            except Exception as exc:  # one bad answer must not cost the whole replay
+                failed += 1
+                print(f"      FAILED: {exc}", file=sys.stderr, flush=True)
+    finally:
+        graph.close()
+
+    after = _node_counts(s)
+    print("\nNode counts by type (before -> after):")
+    for t in sorted(set(before) | set(after), key=lambda x: x.value):
+        b, a = before.get(t, 0), after.get(t, 0)
+        if b or a:
+            print(f"  {t.value:<14} {b:>4} -> {a:>4}   {a - b:+d}")
+    if failed:
+        print(f"\n{failed} answer(s) failed to ingest — see stderr above.", file=sys.stderr)
+    print("\nRebuilt. Re-check a brief with `cli plan --persona <id>`.")
+    return 1 if failed else 0
+
+
+def _node_counts(settings) -> dict:
+    from .models import NodeType
+
+    graph = _open_graph(settings)
+    try:
+        return {t: len(graph.nodes_by_type(t)) for t in NodeType}
+    except Exception:
+        return {}
+    finally:
+        graph.close()
+
+
 def cmd_plan(args) -> int:
     from .bus import FolderBus
     from .lifecycle import declared_roles, effective_retired
@@ -709,6 +825,15 @@ def main(argv: list[str] | None = None) -> int:
         "--bus", default=None, help="bus root, for persona names (default: settings.bus_root)"
     )
     pdoc.set_defaults(func=cmd_docgen)
+
+    prb = sub.add_parser(
+        "rebuild-graph",
+        help="re-derive the whole graph from every Answer Log (live + archived); bus untouched",
+    )
+    prb.add_argument("--bus", default=None, help="bus root (default: settings.bus_root)")
+    prb.add_argument("--yes", action="store_true", help="required to actually rebuild")
+    prb.add_argument("--dry-run", action="store_true", help="list the logs, change nothing")
+    prb.set_defaults(func=cmd_rebuild_graph)
 
     pp = sub.add_parser(
         "plan", help="emit per-persona Session Brief(s) from the live graph (OKF graph)"

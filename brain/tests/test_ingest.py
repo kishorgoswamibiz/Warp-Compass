@@ -6,8 +6,15 @@ from conftest import FakeGraphStore, FakeLLM
 
 from warp_compass_brain.create_gate import CreateGate
 from warp_compass_brain.extractor import Extractor
-from warp_compass_brain.ingest import Ingestor
-from warp_compass_brain.models import ConfidenceStatus, EdgeType
+from warp_compass_brain.ingest import Ingestor, _candidate_context
+from warp_compass_brain.models import (
+    CandidateNode,
+    CandidateRelation,
+    ConfidenceStatus,
+    EdgeType,
+    ExtractionResult,
+    NodeType,
+)
 from warp_compass_brain.ontology import load_ontology
 from warp_compass_brain.queues import JsonlQueue
 from warp_compass_brain.resolve import Resolver
@@ -95,3 +102,52 @@ def test_unregistered_category_recorded_in_pending(tmp_path):
     assert len(s.created) == 1
     node = next(iter(graph.nodes.values()))
     assert node.category_codes == ["02"]  # default for Activity (77.7 stripped upstream)
+
+
+# --- P17b: the proposed node's own stage/role reach the adjudicator (ADR #40) --------------------
+
+
+def test_candidate_context_reads_the_stage_and_role_off_its_own_batch():
+    """The candidate isn't in the graph, so its placement can only come from its sibling refs.
+
+    This is the half of ADR #40 that silently no-ops if it breaks: the adjudicator would still get
+    rich context for every EXISTING card and nothing for the node it is judging, and a missing stage
+    then reads as a difference — worse than showing neither side.
+    """
+    extraction = ExtractionResult(
+        nodes=[
+            CandidateNode(ref="n1", type=NodeType.ACTIVITY, canonical_name="Give UAT Demos",
+                          description="demo during UAT"),
+            CandidateNode(ref="n2", type=NodeType.ROLE,
+                          canonical_name="Business Analysis Specialist", description="the BA"),
+            CandidateNode(ref="n3", type=NodeType.STAGE, canonical_name="UAT",
+                          description="user acceptance testing"),
+        ],
+        relations=[
+            CandidateRelation(type=EdgeType.PERFORMS, from_ref="n2", to_ref="n1"),
+            CandidateRelation(type=EdgeType.PART_OF, from_ref="n1", to_ref="n3"),
+        ],
+    )
+
+    ctx = _candidate_context(extraction.nodes[0], extraction)
+
+    assert ctx == " [performed by Business Analysis Specialist; in stage UAT]"
+
+
+def test_candidate_context_is_empty_when_the_answer_placed_nothing():
+    extraction = ExtractionResult(
+        nodes=[CandidateNode(ref="n1", type=NodeType.ACTIVITY, canonical_name="Do a thing",
+                             description="unplaced")],
+        relations=[],
+    )
+    assert _candidate_context(extraction.nodes[0], extraction) == ""
+
+
+def test_candidate_context_only_describes_activities():
+    """A Role or Artifact has no 'performed by / in stage', so the line would be noise."""
+    extraction = ExtractionResult(
+        nodes=[CandidateNode(ref="n1", type=NodeType.ROLE, canonical_name="Some Role",
+                             description="x")],
+        relations=[],
+    )
+    assert _candidate_context(extraction.nodes[0], extraction) == ""

@@ -187,6 +187,85 @@ def declared_roles(bus: FolderBus) -> dict[str, tuple[str, ...]]:
 
 
 @dataclass
+class AnswerEntry:
+    """One answer ready to re-ingest: what ``ingest_answer`` needs, plus where it came from."""
+
+    persona_id: str
+    session_id: str
+    ts: str
+    raw_answer: str
+    source: str  # "<participant_id>/<log name>", for reporting only
+
+
+def all_answer_entries(bus: FolderBus) -> list[AnswerEntry]:
+    """Every answer in the engagement, live **and archived**, in chronological order (P17b).
+
+    The graph is re-derivable from the Answer Logs (`answer-log.schema.json`, ADR #4), and this is
+    the function that makes that promise real: it is the complete input to a rebuild.
+
+    **Archived folders are included, and that is load-bearing.** Retiring somebody archives their
+    folder rather than deleting it precisely so their knowledge survives (ADR #30); a rebuild that
+    walked only ``participants/`` would delete a departed colleague's entire contribution the first
+    time it ran, quietly turning retirement into the graph deletion ADR #30 refused to build.
+
+    **Sorted by timestamp across everybody**, not per person, because merge order is not neutral: a
+    merge appends provenance but keeps the FIRST contributor's canonical name and description, so
+    ingesting one person's whole history before another's would attribute shared nodes differently
+    than the interviews actually happened. Entries with no usable timestamp sort last, keeping the
+    order total and deterministic rather than raising.
+    """
+    entries: list[AnswerEntry] = []
+    for participant_id, folder in _log_folders(bus):
+        profile = _read_json(folder / "profile.json")
+        persona_id = str(profile.get("persona_id") or participant_id)
+        log_dir = folder / "answer_logs"
+        if not log_dir.is_dir():
+            continue
+        for path in sorted(p for p in log_dir.iterdir() if p.suffix == ".json"):
+            log = _read_json(path)
+            session_id = str(log.get("session_id") or path.stem)
+            for e in log.get("entries", []):
+                raw = (e.get("raw_answer") or "").strip()
+                if not raw:
+                    continue
+                entries.append(
+                    AnswerEntry(
+                        persona_id=persona_id,
+                        session_id=session_id,
+                        ts=str(e.get("ts") or ""),
+                        raw_answer=raw,
+                        source=f"{participant_id}/{path.name}",
+                    )
+                )
+    # "" sorts before every real ISO timestamp, so push the unstamped to the end explicitly.
+    entries.sort(key=lambda e: (e.ts == "", e.ts, e.source))
+    return entries
+
+
+def _log_folders(bus: FolderBus) -> list[tuple[str, Path]]:
+    """``(participant_id, folder)`` for every live participant, then every archived one."""
+    out = [(pid, bus.participant_dir(pid)) for pid in bus.list_participants()]
+    archive = bus.archive_dir
+    if archive.is_dir():
+        for d in sorted(p for p in archive.iterdir() if p.is_dir()):
+            # Archive folders are named "<participant_id>__<date>" (see `retire_participant`).
+            out.append((d.name.split("__")[0], d))
+    return out
+
+
+def _read_json(path: Path) -> dict:
+    import json
+
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+@dataclass
 class RosterEntry:
     id: str
     display_name: str

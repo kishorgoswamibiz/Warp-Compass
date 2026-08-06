@@ -45,3 +45,14 @@ automatically on first sight and records which logs are already ingested (the re
 - `run-round.sh` / `run-round.ps1` — one collect→register→ingest→plan→distribute round (Phase 8).
 - `migrate_neo4j_to_okf.py` — one-off copy of a pre-P12 Neo4j graph into the OKF bundle
   (`uv run --with neo4j python ..\scripts\migrate_neo4j_to_okf.py` from `brain/`).
+- `similarity_probe.py` — **run this before changing `similarity_ceiling`** (P17b). Reports every
+  close node pair split by whether the two share a stage and a performer, then shows what each
+  candidate ceiling would merge and what it would merge *wrongly*. Phase 17 planned to lower the
+  ceiling and this probe is what showed that would delete real process distinctions — duplicates and
+  genuinely-different work sit in the same cosine band (ADR #41).
+  `uv run --extra vectors python ..\scripts\similarity_probe.py` from `brain/`.
+
+> **Rebuilding the graph is a CLI command, not a script:** `cli rebuild-graph --yes` (P17b) replays
+> every Answer Log, live and archived, after you improve the extractor or resolver. It never touches
+> the bus. See `OPERATOR-MANUAL.md` §4. Do not confuse it with `reset-engagement`, which deletes the
+> participant folders — i.e. the logs a rebuild reads.

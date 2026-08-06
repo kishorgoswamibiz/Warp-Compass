@@ -17,6 +17,7 @@ import pytest
 from warp_compass_brain.bus import FolderBus
 from warp_compass_brain.lifecycle import (
     LifecycleError,
+    all_answer_entries,
     effective_retired,
     persona_display_names,
     reset_engagement,
@@ -292,3 +293,71 @@ def test_a_restored_participant_is_no_longer_treated_as_retired(tmp_path):
 
     assert bus.list_retired() == {"rahul-ba-3c1f"}  # the stale marker is still on disk...
     assert effective_retired(bus) == set()  # ...but the folder wins
+
+
+# --- P17b: the complete input to a graph rebuild -------------------------------------------------
+
+
+def _seed_log(bus: FolderBus, pid: str, name: str, entries: list[tuple[str, str]]) -> None:
+    """Write an answer log with `(ts, raw_answer)` pairs."""
+    bus.ensure_participant(pid)
+    (bus.participant_dir(pid) / "answer_logs" / f"{name}.json").write_text(
+        json.dumps(
+            {
+                "session_id": name,
+                "persona_id": pid,
+                "participant_id": pid,
+                "entries": [
+                    {"kind": "guided", "raw_answer": a, "ts": t, "thread_id": None}
+                    for t, a in entries
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_rebuild_still_sees_a_retired_colleagues_answers(tmp_path):
+    """ADR #30 says retirement never costs the graph anything. A rebuild is where that is tested.
+
+    Retiring archives the folder rather than deleting it, precisely so the knowledge survives. If
+    `all_answer_entries` walked only `participants/`, the first rebuild would quietly delete a
+    departed colleague's entire contribution — turning retirement into the graph deletion ADR #30
+    refused to build.
+    """
+    bus = FolderBus(tmp_path)
+    _seed_participant(bus, "live-ba-0001", name="Kishor", role="BA", logs=0)
+    _seed_log(bus, "live-ba-0001", "s2", [("2026-08-02T10:00:00Z", "I write user stories")])
+    _seed_participant(bus, "gone-pm-0002", name="Rahul", role="PM", logs=0)
+    _seed_log(bus, "gone-pm-0002", "s1", [("2026-08-01T10:00:00Z", "I own the timeline")])
+    retire_participant(bus, "gone-pm-0002", now=NOW)
+
+    entries = all_answer_entries(bus)
+
+    assert [e.raw_answer for e in entries] == ["I own the timeline", "I write user stories"]
+    assert {e.persona_id for e in entries} == {"live-ba-0001", "gone-pm-0002"}
+
+
+def test_rebuild_input_is_ordered_by_time_across_everyone(tmp_path):
+    """Merge order is not neutral: a merge keeps the FIRST contributor's name and description.
+
+    Replaying one person's whole history before another's would attribute shared nodes differently
+    than the interviews actually happened, so the stream is sorted globally, not per person.
+    """
+    bus = FolderBus(tmp_path)
+    _seed_participant(bus, "a-ba-0001", name="A", role="BA", logs=0)
+    _seed_log(bus, "a-ba-0001", "s1", [("2026-08-01T09:00:00Z", "first"), ("2026-08-03T09:00:00Z", "third")])
+    _seed_participant(bus, "b-sa-0002", name="B", role="SA", logs=0)
+    _seed_log(bus, "b-sa-0002", "s1", [("2026-08-02T09:00:00Z", "second")])
+
+    assert [e.raw_answer for e in all_answer_entries(bus)] == ["first", "second", "third"]
+
+
+def test_rebuild_input_skips_empty_answers_and_tolerates_a_missing_timestamp(tmp_path):
+    """An unstamped entry must not raise and must not jump the queue — it sorts last."""
+    bus = FolderBus(tmp_path)
+    _seed_participant(bus, "a-ba-0001", name="A", role="BA", logs=0)
+    _seed_log(bus, "a-ba-0001", "s1", [("2026-08-01T09:00:00Z", "real"), ("", "   ")])
+    _seed_log(bus, "a-ba-0001", "s2", [("", "unstamped")])
+
+    assert [e.raw_answer for e in all_answer_entries(bus)] == ["real", "unstamped"]

@@ -24,7 +24,9 @@ from .ontology import Ontology
 from .resolve import Adjudication, RetrievalCandidate
 
 # Fallback category per node type, used only when the extractor proposed none.
+# Must cover every NodeType — see test_every_node_type_has_a_default.
 _DEFAULT_CATEGORY: dict[NodeType, str] = {
+    NodeType.STAGE: "00",
     NodeType.EVENT: "01",
     NodeType.ACTIVITY: "02",
     NodeType.SYSTEM: "03",
@@ -35,6 +37,7 @@ _DEFAULT_CATEGORY: dict[NodeType, str] = {
     NodeType.PROBLEM: "09",
     NodeType.DESIRE: "09",
     NodeType.KPI: "10",
+    NodeType.OBJECTIVE: "11",
 }
 
 
@@ -86,7 +89,16 @@ class CreateGate:
         registered = [c for c in cand.category_codes if self._ont.is_category_code(c)]
         pending = [c for c in cand.category_codes if not self._ont.is_category_code(c)]
         if not registered:
-            registered = [_DEFAULT_CATEGORY[cand.type]]  # auto-assign a default tag
+            default = _DEFAULT_CATEGORY.get(cand.type)  # auto-assign a default tag
+            if default is None:
+                # A real ontology type with no default mapping: quarantine for BA review
+                # rather than crash the round.
+                return GateDecision(
+                    action="quarantine",
+                    reason=f"no default category for node type {cand.type!r}",
+                    pending_codes=pending,
+                )
+            registered = [default]
 
         # 2d) Minimum completeness: name + description + type + >=1 category.
         if not cand.canonical_name.strip() or not cand.description.strip():

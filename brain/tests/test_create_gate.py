@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from warp_compass_brain.create_gate import CreateGate
+from warp_compass_brain.create_gate import _DEFAULT_CATEGORY, CreateGate
 from warp_compass_brain.models import CandidateNode, NodeCard, NodeType
 from warp_compass_brain.ontology import load_ontology
 from warp_compass_brain.resolve import Adjudication, RetrievalCandidate
@@ -59,6 +59,23 @@ def test_unregistered_code_routed_to_pending():
     assert d.action == "create"
     assert d.pending_codes == ["99.9"]
     assert d.final_category_codes == ["02"]  # fell back to default since 99.9 unregistered
+
+
+def test_every_node_type_has_a_registered_default_category():
+    """A missing default used to KeyError mid-round (Stage, Objective)."""
+    for t in NodeType:
+        assert t in _DEFAULT_CATEGORY, f"no default category for {t}"
+        assert ONT.is_category_code(_DEFAULT_CATEGORY[t]), f"unregistered default for {t}"
+
+
+def test_default_category_for_every_type_yields_create():
+    gate = CreateGate(ONT)
+    for t in NodeType:
+        d = gate.decide(
+            _cand(type=t, category_codes=[]), [], Adjudication(verdict="new", reason="x")
+        )
+        assert d.action == "create", f"{t} -> {d.action}: {d.reason}"
+        assert d.final_category_codes == [_DEFAULT_CATEGORY[t]]
 
 
 def test_same_and_conflict_passthrough():

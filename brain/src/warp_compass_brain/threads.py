@@ -17,13 +17,23 @@ from datetime import datetime
 
 from .completeness import CompletenessReport, Gap, GapKind
 
+# Gap kinds that must never become a thread. A MISALIGNMENT (P15c / ADR #32) is a cross-altitude
+# divergence — a FINDING the engagement sells, not a defect to close. `crosspersona` routes no
+# reconciliation thread for it and `docgen` reports it with both accounts; this generator is the
+# third place that has to know, so it skips them here rather than asking anyone to reconcile.
+_NON_THREAD_GAP_KINDS = frozenset({GapKind.MISALIGNMENT})
+
 # Impact weight per gap kind (the chain/conflict defects matter most).
+# Must cover every GapKind not in _NON_THREAD_GAP_KINDS — see test_every_gap_kind_is_handled.
 _KIND_IMPACT: dict[GapKind, float] = {
     GapKind.BROKEN_CHAIN: 1.0,
     GapKind.UNRESOLVED_CONFLICT: 0.9,
     GapKind.ONE_SIDED_HANDOFF: 0.7,
     GapKind.MISSING_FIELD: 0.5,  # refined per-field below
 }
+
+# Fallback impact for a gap kind with no weight yet: ranked last, but never a crashed round.
+_UNKNOWN_KIND_IMPACT = 0.1
 
 # Per-field impact for MISSING_FIELD gaps (structural fields the process depends on rank higher).
 _FIELD_IMPACT: dict[str, float] = {
@@ -73,6 +83,8 @@ def threads_from_gaps(gaps: list[Gap], *, now: str | None = None) -> list[OpenTh
     threads: list[OpenThread] = []
     used_ids: set[str] = set()
     for gap in gaps:
+        if gap.kind in _NON_THREAD_GAP_KINDS:
+            continue  # a finding to report, not a thread to close
         goal, why = _goal_and_why(gap)
         threads.append(
             OpenThread(
@@ -102,7 +114,7 @@ def _priority(gap: Gap, ref: datetime | None) -> float:
     if gap.kind is GapKind.MISSING_FIELD and gap.field:
         impact = _FIELD_IMPACT.get(gap.field, _KIND_IMPACT[GapKind.MISSING_FIELD])
     else:
-        impact = _KIND_IMPACT[gap.kind]
+        impact = _KIND_IMPACT.get(gap.kind, _UNKNOWN_KIND_IMPACT)
     return impact + _recency_bonus(gap.latest_ts, ref)
 
 

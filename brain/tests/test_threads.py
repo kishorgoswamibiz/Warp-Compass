@@ -62,3 +62,36 @@ def test_thread_ids_are_unique():
     ]
     threads = build_threads(_report(gaps))
     assert len({t.id for t in threads}) == 2
+
+
+def test_misalignment_gap_yields_no_thread():
+    """P15c / ADR #32: a cross-altitude divergence is a finding to report, never a thread to
+    close. It used to KeyError in _priority and take the whole round down."""
+    gaps = [
+        Gap(GapKind.MISALIGNMENT, "exec vs doer", node_id="act.a", node_name="A"),
+        Gap(GapKind.BROKEN_CHAIN, "disconnected", node_id="act.b", node_name="B"),
+    ]
+    threads = build_threads(_report(gaps))
+    assert [t.kind for t in threads] == [GapKind.BROKEN_CHAIN.value]
+
+
+def test_misalignment_only_report_yields_empty_thread_list():
+    threads = build_threads(
+        _report([Gap(GapKind.MISALIGNMENT, "exec vs doer", node_id="act.a", node_name="A")])
+    )
+    assert threads == []
+
+
+def test_every_gap_kind_is_handled():
+    """Every GapKind must either have an impact weight or be explicitly non-threadable — no
+    kind may reach _priority without one (the P15c regression)."""
+    from warp_compass_brain.threads import _KIND_IMPACT, _NON_THREAD_GAP_KINDS
+
+    for kind in GapKind:
+        assert kind in _KIND_IMPACT or kind in _NON_THREAD_GAP_KINDS, f"unhandled GapKind: {kind}"
+
+
+def test_no_gap_kind_crashes_thread_generation():
+    for kind in GapKind:
+        gaps = [Gap(kind, "detail", node_id="act.a", node_name="A")]
+        build_threads(_report(gaps))  # must not raise

@@ -241,9 +241,24 @@ class CrossPersonaEngine:
                 # handed it over, which reads as a bug and invites a "that's me" non-answer. The
                 # question is still worth asking (the switch is where dual-hat work really leaks),
                 # so route a differently-worded twin instead of suppressing it.
+                #
+                # ⚠ DECLARED on BOTH sides, never inferred (P17a, ADR #38). `_role_owner_personas`
+                # deliberately counts contribution as ownership so that ROUTING never misses a real
+                # holder — right for choosing who to ask, wrong for telling somebody to their face
+                # which hats they wear. Describing what QA does gives you provenance on QA's
+                # activities, which made a Solution Architect who declared one role hear *"when you
+                # switch from your Quality Assurance Head hat…"*, and a Business Analyst hear the
+                # Delivery Specialist version three times after denying it twice — *"I told you I
+                # do not act as a delivery specialist. Why you're not trying to understand?"*
+                #
+                # Routing is untouched: everyone below still receives a thread. Only the WORDING
+                # narrows, and a non-declarer gets the standard confirm copy, which is answerable
+                # ("do you receive it?") instead of insulting.
+                declared_owners = self._declared_owners(snap)
                 giver_personas = (
-                    self._role_owner_personas(giver_role_id, snap) if giver_role_id else set()
+                    declared_owners.get(giver_role_id, set()) if giver_role_id else set()
                 )
+                recv_personas = declared_owners.get(role_id, set())
                 self_thread = replace(
                     thread,
                     id=f"thread.{KIND_HANDOFF_SELF}.{act_id}.{role_id}",
@@ -258,7 +273,7 @@ class CrossPersonaEngine:
                     ),
                 )
                 for persona in sorted(self._role_owner_personas(role_id, snap)):
-                    dual_hat = persona in giver_personas
+                    dual_hat = persona in giver_personas and persona in recv_personas
                     routed.append(RoutedThread(persona, self_thread if dual_hat else thread))
             else:  # route_discoverer — receiver not interviewed yet; keep with the source persona
                 thread = OpenThread(

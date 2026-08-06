@@ -220,6 +220,32 @@ def test_a_roles_open_gap_reaches_every_holder_of_that_role():
         assert _mentions(brief, BA), "the opener must name the role, not invent work"
 
 
+def test_an_inherited_thread_names_the_role_that_made_you_inherit_it():
+    """P17a (ADR #37): the copy must name YOUR role, not the gap's attributed one.
+
+    A gap carries `_attributed_role` — the first role PERFORMing the node — while inheritance is
+    driven by the role the *listener* declared. On a node two roles perform, those are routinely
+    different, and the sentence then names a role the listener does not hold. A Solution Architect's
+    last question before he ended his session was *"Another Account Management Specialist described
+    'Send Proposal', but we never captured who picks it up afterwards"* — true of the graph, and a
+    non-sequitur to him.
+    """
+    g, declared = _three_bas()
+    # `role.ams` sorts before `role.ba`, so it wins `_attributed_role` — which is exactly the
+    # collision that produced the live defect.
+    _role(g, "role.ams", "Account Management Specialist")
+    g.add_edge(_edge(EdgeType.PERFORMS, "role.ams", "act.stories"))
+
+    brief = _planner(g, declared).plan("persona.ba2", session_id="s1")
+
+    inherited = [t for t in brief.open_threads if t.id.startswith("role.")]
+    assert inherited, "the BA should still inherit their role's open gap"
+    for t in inherited:
+        copy = f"{t.why} {t.suggested_opener}"
+        assert BA in copy
+        assert "Account Management Specialist" not in copy
+
+
 def test_the_gap_closes_for_everyone_the_moment_one_holder_answers():
     """Self-clearing, with no ledger: gaps are recomputed from the graph every round.
 

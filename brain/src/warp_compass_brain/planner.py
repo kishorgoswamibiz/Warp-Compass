@@ -96,6 +96,56 @@ COLD_START_OPENERS: list[str] = [
 ]
 
 
+#: Threads about ONE node a single brief may carry (P17a). Small on purpose: the cap is what keeps
+#: a cluster a short walk through an activity rather than an interrogation of it, and it bounds the
+#: damage when the clustered node turns out not to be the person's work at all.
+_CLUSTER_MAX = 3
+
+
+def _cluster(
+    threads: list[OpenThread], limit: int, *, per_node: int = _CLUSTER_MAX
+) -> list[OpenThread]:
+    """Pick ``limit`` threads that walk a few nodes in depth, most urgent node first.
+
+    ``threads`` must already be priority-sorted: that order decides which node opens next, so the
+    highest-priority thread still leads the brief and cross-persona threads still lead it overall.
+
+    **Why this exists (P17a, ADR #39).** Ranking is per-gap — ``_FIELD_IMPACT`` scores
+    ``next_handoff`` highest, ``trigger`` next, and so on — so a straight ``threads[:max]`` prefix
+    takes *one field across every activity*. It is a column-major read of a table whose rows are the
+    person's work. A real Solution Architect brief came out as **eleven of twelve threads asking
+    "who picks it up next?"**, five of them consecutively about five different activities, and the
+    reserve list was visibly banded: four ``next_handoff``, then eleven ``trigger``, then nine
+    ``output``. He answered turn six with *"I mean, it's a continuous process. People parallelly
+    take care of other things"* — a person telling you the question does not fit — and was asked it
+    three more times before ending the session early.
+
+    That also made the interviewer structurally unable to follow its own instructions: the system
+    prompt tells it to walk one stage at a time and *"finish a stage before moving to the next"*,
+    which no prefix of this ranking can support.
+
+    Grouping by node inverts the read to row-major, so a brief becomes "here are three things I
+    still don't know about *Monitor Development Progress*, then three about *Check Changesets*" —
+    which is the shape the interviewer was always told to conduct.
+    """
+    if limit <= 0:
+        return []
+    by_node: dict[str, list[OpenThread]] = {}
+    for t in threads:
+        by_node.setdefault(t.node_id or t.id, []).append(t)
+    chosen: list[OpenThread] = []
+    opened: set[str] = set()
+    for t in threads:
+        if len(chosen) >= limit:
+            break
+        key = t.node_id or t.id
+        if key in opened:
+            continue
+        opened.add(key)
+        chosen.extend(by_node[key][:per_node])
+    return chosen[:limit]
+
+
 @dataclass
 class BriefThread:
     """One ranked thread in a Session Brief (mirrors the schema's open_threads item)."""
@@ -229,8 +279,9 @@ class Planner:
             key=lambda t: (-t.priority, t.id),
         )
 
+        own = _cluster(threads, self._max)
         brief_threads: list[BriefThread] = []
-        for rank, t in enumerate(threads[: self._max], start=1):
+        for rank, t in enumerate(own, start=1):
             opener, followups = _opener_and_followups(t)
             brief_threads.append(
                 BriefThread(
@@ -246,7 +297,8 @@ class Planner:
         # Appended after their own work for the same structural reason as orphans below: a question
         # about a colleague's account of your role must never outrank your own.
         role_ids = self._persona_role_ids(persona_id, snap)
-        for t in self._role_threads(snap, report, subgraph_ids, role_ids)[: self._role_max]:
+        role_threads = self._role_threads(snap, report, subgraph_ids, role_ids)
+        for t in _cluster(role_threads, self._role_max):
             opener, followups = _role_opener_and_followups(t)
             brief_threads.append(
                 BriefThread(
@@ -260,7 +312,7 @@ class Planner:
             )
         # Questions left behind by retired teammates, appended AFTER this person's own work so the
         # rank floor is structural: they can never outrank a thread about the person's own role.
-        for t in self._orphan_threads(snap, report, subgraph_ids)[: self._orphan_max]:
+        for t in _cluster(self._orphan_threads(snap, report, subgraph_ids), self._orphan_max):
             opener, followups = _orphan_opener_and_followups(t)
             brief_threads.append(
                 BriefThread(
@@ -272,7 +324,10 @@ class Planner:
                     followups=followups,
                 )
             )
-        reserve = [t.id for t in threads[self._max :]]
+        # Everything ranked but not carried. No longer a suffix of `threads`, because clustering
+        # picks by node rather than straight down the priority list.
+        carried = {t.id for t in own}
+        reserve = [t.id for t in threads if t.id not in carried]
         summary = self._persona_summary(persona_id, subgraph_ids, snap, report, role_ids)
 
         return SessionBrief(
@@ -338,11 +393,21 @@ class Planner:
         """
         if not role_ids:
             return []
-        role_owned: set[str] = set(role_ids)
-        for role_id in role_ids:
-            role_owned.update(snap.out(role_id, EdgeType.PERFORMS))
+        # node id -> the DECLARED role of this persona that dragged it in. The thread's copy has to
+        # name *that* role, not whichever role the gap happens to be attributed to (P17a, ADR #37).
+        # `Gap.role_name` is `_attributed_role`, i.e. the first role PERFORMing the node — on a node
+        # two roles perform it is routinely the other one, and the resulting sentence names a role
+        # the listener does not hold. A Solution Architect's last question before he ended the
+        # session was *"Another Account Management Specialist described 'Send Proposal'…"*, which
+        # is a non-sequitur however true it is of the graph.
+        inheriting: dict[str, tuple[str, str | None]] = {}
+        for role_id in sorted(role_ids):
+            card = snap.nodes.get(role_id)
+            entry = (role_id, card.canonical_name if card is not None else None)
+            for nid in (role_id, *sorted(snap.out(role_id, EdgeType.PERFORMS))):
+                inheriting.setdefault(nid, entry)
         inherited = {
-            nid for nid in role_owned if nid not in subgraph_ids and nid in snap.nodes
+            nid for nid in inheriting if nid not in subgraph_ids and nid in snap.nodes
         }
         if not inherited:
             return []
@@ -351,7 +416,11 @@ class Planner:
             for g in report.gaps
             if g.node_id in inherited and g.kind not in _CROSS_PERSONA_GAP_KINDS
         ]
-        return threads_from_gaps(gaps, now=self._now)
+        threads = threads_from_gaps(gaps, now=self._now)
+        for t in threads:
+            role_id, role_name = inheriting[t.node_id]
+            t.role_id, t.role_name = role_id, role_name
+        return threads
 
     # --- orphan threads (P13) ---
 
@@ -379,9 +448,22 @@ class Planner:
 
     def _persona_summary(self, persona_id, subgraph_ids, snap, report, role_ids=None) -> str:
         cards = [snap.nodes[nid] for nid in subgraph_ids]
+        # DECLARED roles only — never roles the person merely *mentioned* (P17a, ADR #37).
+        #
+        # This sentence is injected at the top of the live prompt on EVERY turn, so whatever it
+        # claims, the interviewer believes about the person sitting in front of it. It used to read
+        # the roles off the persona's own subgraph — every Role node they have provenance on — which
+        # is the WC-R5 over-reach in its most damaging position: say "the QA team tests it" once and
+        # you have provenance on `role.quality-assurance-head`, so the brief told the model you WERE
+        # one. A Solution Architect who had declared exactly one role was briefed as "Business
+        # Analysis Specialist, Development Lead, Quality Assurance Head, Solution Architect,
+        # Technical Specialist", and a Business Analyst as (among others) "Customer".
+        #
+        # Resolved graph names are preferred so the phrasing matches the graph's vocabulary; the
+        # raw declared titles are the fallback for someone whose Role node doesn't exist yet.
         declared = sorted(
             snap.nodes[rid].canonical_name for rid in (role_ids or ()) if rid in snap.nodes
-        )
+        ) or sorted(self._declared.get(persona_id, ()))
         # Someone who has just joined has contributed nothing, so the graph knows only what they
         # declared. Saying "you've described 0 activities" to a person who has not been asked
         # anything yet reads as an accusation; name the role and let the threads do the work.
@@ -389,9 +471,10 @@ class Planner:
             if declared:
                 return f"As {', '.join(declared)}, you haven't described your work yet."
             return ""
-        roles = sorted(
-            c.canonical_name for c in cards if c.type is NodeType.ROLE
-        ) or declared
+        # Nothing declared (a pre-P15a device, or someone who skipped the chips) means we genuinely
+        # do not know their role. Say nothing rather than guess: the sentence below drops the
+        # "As ..." prefix, which is honest, where a guess is actively harmful.
+        roles = declared
         activities = [c for c in cards if c.type is NodeType.ACTIVITY]
         # complete = activity with no missing-field gap attributed to it
         incomplete_ids = {
@@ -401,9 +484,11 @@ class Planner:
         n_systems = sum(1 for c in cards if c.type is NodeType.SYSTEM)
         n_problems = sum(1 for c in cards if c.type is NodeType.PROBLEM)
 
-        role_phrase = ", ".join(roles) if roles else "your role"
-        parts = [f"As {role_phrase}, you've described {len(activities)} activit"
-                 f"{'y' if len(activities) == 1 else 'ies'}"]
+        described = (
+            f"you've described {len(activities)} activit"
+            f"{'y' if len(activities) == 1 else 'ies'}"
+        )
+        parts = [f"As {', '.join(roles)}, {described}" if roles else described.capitalize()]
         if activities:
             open_n = len(activities) - complete
             parts.append(f"{complete} fully covered, {open_n} with open questions")

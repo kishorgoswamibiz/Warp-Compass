@@ -51,8 +51,8 @@ def _edge(etype, a, b, persona="persona.A"):
     return Edge(type=etype, from_id=a, to_id=b, provenance=[_prov(persona)])
 
 
-def _engine(g):
-    return CrossPersonaEngine(g, ONT, now=TS)
+def _engine(g, declared=None):
+    return CrossPersonaEngine(g, ONT, now=TS, declared_roles=declared)
 
 
 # --- handoff verdict matrix -------------------------------------------------------------------
@@ -194,6 +194,12 @@ def test_conflicting_node_is_not_promoted():
 # --- P15a §4.5: a multi-hat person hands work to themselves ------------------------------------
 
 
+#: What persona.A ticked at onboarding. The dual-hat copy is gated on the DECLARATION of both
+#: roles, never on having contributed their activities (P17a, ADR #38) — see
+#: `test_contributing_to_both_roles_is_not_enough_to_claim_two_hats` for the reason.
+_DUAL_HAT_DECLARED = {"persona.A": ("Delivery Specialist", "Account Management Specialist")}
+
+
 def _dual_hat_graph():
     """One persona holding two roles, handing work from the first hat to the second.
 
@@ -201,6 +207,9 @@ def _dual_hat_graph():
     is both. The receiving role is "active" (its activity carries this persona's provenance), so
     ``_handoff_state`` returns ``route_receiver``; without the P15a branch the persona would be
     told a stranger handed it to them.
+
+    Pair it with ``_DUAL_HAT_DECLARED``: the graph alone establishes that persona.A *talked about*
+    both roles, which is deliberately no longer enough to tell them they wear both hats.
     """
     g = FakeGraphStore()
     g.upsert_node(_node("role.ds", NodeType.ROLE, "Delivery Specialist", personas="persona.A"))
@@ -218,7 +227,7 @@ def _dual_hat_graph():
 
 
 def test_self_handoff_is_routed_as_a_hat_switch_not_a_stranger():
-    report = _engine(_dual_hat_graph()).assess()
+    report = _engine(_dual_hat_graph(), _DUAL_HAT_DECLARED).assess()
     assert [h.state for h in report.handoffs] == ["route_receiver"]
 
     routed = [rt for rt in report.routed if rt.thread.node_id == "act.close"]
@@ -236,7 +245,7 @@ def test_self_handoff_is_routed_as_a_hat_switch_not_a_stranger():
 
 def test_self_handoff_copy_never_says_another_team():
     """The regression the copy branch exists for (plan §11)."""
-    report = _engine(_dual_hat_graph()).assess()
+    report = _engine(_dual_hat_graph(), _DUAL_HAT_DECLARED).assess()
     thread = next(rt.thread for rt in report.routed if rt.thread.kind == KIND_HANDOFF_SELF)
 
     opener, followups = _opener_and_followups(thread)
@@ -245,6 +254,41 @@ def test_self_handoff_copy_never_says_another_team():
     assert "hat" in opener.lower()
     assert "Close the project" in opener
     assert followups  # still probes for what leaks in the switch
+
+
+def test_contributing_to_both_roles_is_not_enough_to_claim_two_hats():
+    """The P17a regression, straight from a live session (ADR #38).
+
+    ``_dual_hat_graph`` gives persona.A provenance on both roles' activities and nothing else —
+    which is what merely *describing* how two roles work looks like in the graph. That used to
+    satisfy the dual-hat branch, so a Solution Architect who declared exactly one role was opened
+    with *"when you switch from your Quality Assurance Head hat to your Technical Specialist
+    hat…"*, and a Business Analyst was asked the Delivery Specialist version a third time after
+    denying it twice: *"I told you I do not act as a delivery specialist."*
+
+    They must still be ROUTED the thread — they are the only person who has spoken about this work,
+    and the handoff is still unconfirmed. Only the wording narrows, to something answerable.
+    """
+    report = _engine(_dual_hat_graph()).assess()  # no declaration anywhere
+
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.close"]
+    assert [(rt.persona_id, rt.thread.kind) for rt in routed] == [
+        ("persona.A", KIND_HANDOFF_CONFIRM)
+    ]
+    opener, _ = _opener_and_followups(routed[0].thread)
+    assert "both hats" not in opener.lower()
+    assert "your delivery specialist hat" not in opener.lower()
+    assert "Delivery Specialist hands" in opener  # named as a role, not as one of theirs
+
+
+def test_declaring_only_one_of_the_two_roles_is_still_not_two_hats():
+    """Half a declaration is not a declaration — the giving side has to be theirs too."""
+    declared = {"persona.A": ("Account Management Specialist",)}  # receiver only
+
+    report = _engine(_dual_hat_graph(), declared).assess()
+
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.close"]
+    assert [rt.thread.kind for rt in routed] == [KIND_HANDOFF_CONFIRM]
 
 
 def test_a_genuine_second_person_still_gets_the_stranger_copy():

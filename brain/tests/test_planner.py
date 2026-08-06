@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+from collections import Counter
 from pathlib import Path
 
 from conftest import FakeGraphStore
@@ -181,9 +182,126 @@ def test_brief_is_scoped_to_the_personas_own_subgraph():
 def test_persona_summary_mentions_role_and_activity():
     g = FakeGraphStore()
     _bare_activity(g, "act.a", "Take order", persona="persona.A", role_id="role.rep")
-    brief = _planner(g).plan("persona.A", session_id="s")
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
     assert "rep" in brief.persona_summary.lower()
     assert "activit" in brief.persona_summary.lower()
+
+
+def test_persona_summary_never_claims_a_role_they_only_mentioned():
+    """The P17a regression (ADR #37) — the highest-leverage sentence in the whole prompt.
+
+    `persona_summary` leads the brief digest on EVERY live turn, so whatever it claims, the
+    interviewer believes. It used to read roles off the persona's own subgraph, and provenance
+    lands on a Role node the moment you *mention* it — so a Solution Architect who declared one
+    role was briefed as five, and a Business Analyst as six, including `Customer`. Both were then
+    interrogated about other people's jobs, and both ended their session early.
+    """
+    g = FakeGraphStore()
+    _bare_activity(g, "act.a", "Take order", persona="persona.A", role_id="role.rep")
+    # They talked about the QA Head — that is the ONLY way this node gets their provenance.
+    g.upsert_node(_node("role.qa", NodeType.ROLE, "Quality Assurance Head", persona="persona.A"))
+
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
+
+    assert "quality assurance" not in brief.persona_summary.lower()
+    assert "rep" in brief.persona_summary.lower()
+
+
+def test_persona_summary_stays_silent_about_role_when_nothing_was_declared():
+    """No declaration means we do not know their role. Say nothing rather than guess."""
+    g = FakeGraphStore()
+    _bare_activity(g, "act.a", "Take order", persona="persona.A", role_id="role.rep")
+    g.upsert_node(_node("role.qa", NodeType.ROLE, "Quality Assurance Head", persona="persona.A"))
+
+    summary = _planner(g).plan("persona.A", session_id="s").persona_summary
+
+    assert not summary.lower().startswith("as ")
+    assert "quality assurance" not in summary.lower()
+    assert "activit" in summary.lower()  # the useful half survives
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 17a — thread clustering: a brief walks a few activities, not one field
+# across all of them (ADR #39).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _many_bare_activities(g, n: int, persona: str = "persona.A"):
+    """`n` activities with no completeness fields — every one produces the SAME set of gaps."""
+    for i in range(n):
+        _bare_activity(g, f"act.{i}", f"Activity {i}", persona=persona, role_id="role.rep")
+
+
+def _fields_of(brief) -> list[str]:
+    """The completeness field each thread asks about, read off the thread id."""
+    return [t.id.rsplit(".", 1)[-1] for t in brief.open_threads]
+
+
+def _nodes_of(brief) -> list[str]:
+    return [t.id.rsplit(".", 2)[-2] for t in brief.open_threads]
+
+
+def test_a_brief_walks_a_few_activities_instead_of_one_field_across_all_of_them():
+    """The P17a regression, measured on the shape that produced it.
+
+    With eight identical activities every field gap exists eight times, and `_FIELD_IMPACT` ranks
+    all eight `next_handoff` gaps above every `trigger` gap. A straight priority prefix therefore
+    took one field across eight activities: the real Solution Architect brief came out as eleven of
+    twelve threads asking *"who picks it up next?"*, five consecutively. He answered *"it's a
+    continuous process"* and was asked three more times before ending the session.
+    """
+    g = FakeGraphStore()
+    _many_bare_activities(g, 8)
+
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
+
+    assert len(brief.open_threads) > 1
+    # Row-major, not column-major: fewer distinct activities than threads, and more than one
+    # question about at least one of them.
+    assert len(set(_nodes_of(brief))) < len(brief.open_threads)
+    assert len(set(_fields_of(brief))) > 1, "a brief must not be one field repeated"
+
+
+def test_a_cluster_is_capped_so_one_activity_cannot_fill_the_brief():
+    g = FakeGraphStore()
+    _many_bare_activities(g, 8)
+
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
+
+    counts = Counter(_nodes_of(brief))
+    assert max(counts.values()) <= 3
+
+
+def test_the_highest_priority_thread_still_leads_the_brief():
+    """Clustering reorders what follows; it must never demote what matters most.
+
+    A cross-persona conflict outranks every completeness gap (`_CONFLICT_PRIORITY` 1.5), and that
+    has to survive grouping or P9's whole ranking contract is gone.
+    """
+    g = FakeGraphStore()
+    _many_bare_activities(g, 8)
+    conflicted = _node("act.hot", NodeType.ACTIVITY, "Disputed step", persona="persona.A")
+    conflicted.provenance.append(_prov("persona.B", ConfidenceStatus.CONFLICTING))
+    g.upsert_node(conflicted)
+
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
+
+    assert brief.open_threads[0].id.startswith("thread.cross_conflict.")
+
+
+def test_threads_dropped_by_clustering_land_in_reserve():
+    """`reserve_threads` is no longer a suffix of the ranked list, so it is computed by difference.
+
+    Getting this wrong would silently lose gaps from the operator's view of what is still open.
+    """
+    g = FakeGraphStore()
+    _many_bare_activities(g, 8)
+
+    brief = _planner(g, declared_roles={"persona.A": ("rep",)}).plan("persona.A", session_id="s")
+
+    carried = {t.id for t in brief.open_threads if not t.id.startswith(("role.", "orphan."))}
+    assert carried.isdisjoint(brief.reserve_threads)
+    assert len(brief.reserve_threads) > len(carried)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

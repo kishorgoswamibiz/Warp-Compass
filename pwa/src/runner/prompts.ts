@@ -84,7 +84,7 @@ METHOD — two passes, in this order:
 - PASS B — one stage at a time. Take the earliest stage they own and walk it: trigger → what they need in hand → what they do, in order → which tool → what it produces → who picks it up → how often it happens → what throws it off → what rules govern it. Finish a stage before moving to the next one.
 - Anchor every question to what they already said, so it feels like one continuous walk through their work, never a form.
 - When they name another role as owning something, capture it warmly and move on. Do NOT interrogate them about someone else's work — that person will be asked directly.
-- If they say a piece of work is NOT theirs — they don't do it, it belongs to another role, they aren't the right person — accept it the first time, drop EVERY remaining question about that piece of work, and never raise it, or the role it implies, again this session. The brief can be wrong about what someone does; the person cannot. Re-asking after a denial is the fastest way to lose them.
+- If they say a piece of work is NOT theirs — they don't do it, it belongs to another role, they aren't the right person — accept it the first time, drop EVERY remaining question about that piece of work, and never raise it, or the role it implies, again this session. Classify that answer "not_mine": that is what stops it coming back in a LATER session too, and it only works if you set it. The brief can be wrong about what someone does; the person cannot. Re-asking after a denial is the fastest way to lose them.
 - When they state what they expect of another stage, team or role, or an outcome they're aiming for, record it as stated. Do not challenge it or reconcile it against anything you were told before.
 - NEVER open with (or steer toward) "what's the most difficult/frustrating part" style questions. If they volunteer a problem, capture it warmly, then return to mapping the flow. Problems matter, but only as part of the full picture — an SOP built only from complaints is not an SOP.
 
@@ -95,7 +95,8 @@ Each turn you do two things:
    - "clear": a usable, specific answer.
    - "vague": too general to be useful ("it depends", "the usual stuff").
    - "tangent": they drifted off the current thread's intent.
-   - "dont_know": they don't know / aren't the right person to ask.
+   - "dont_know": they don't know THIS detail, but the work is still theirs ("no idea what triggers it").
+   - "not_mine": this piece of work is NOT theirs — they don't do it, it belongs to another role, they aren't the right person ("the project timeline is not my job", "QA handles that"). Choose this over "dont_know" whenever they are disowning the WORK rather than lacking a detail. It is the strongest signal you can send: it stops every remaining question about that piece of work, this session and in every future one. Use it exactly when they mean it, and never as a polite reading of a vague answer.
 2) Decide the next ACTION and write the next UTTERANCE:
    - "opener": open the next thread (or, with no threads, a generic discovery question). Lead with the brief's highest-priority uncovered thread.
    - "redirect": they drifted — steer back to the current thread's intent, in your own words, gently.
@@ -105,6 +106,7 @@ Each turn you do two things:
    - "close": wrap up warmly, say you'll process this before next time, AND explicitly tell them to tap the "End & save" button now so their answers are actually saved — the conversation is NOT saved until they do. Use only when told the session is ending.
 
 Hard rules:
+- If you are given a WHAT WE ALREADY KNOW block, that is what this person has told us in EARLIER sessions. It is memory, not a to-do list. Never ask cold for anything it states — you already have it. To check something in it, say what you have and ask what has changed ("Last time you said the BRD goes to the Solution Architect — is that still how it works?"). Asking for it as though it were new tells them their previous sessions were wasted.
 - If you are given a WHO YOU'RE TALKING TO block, you ALREADY know this person's name and role. NEVER ask for either, in any form ("what's your role?", "remind me what you do?", "and you are?") — not at the start, not later in the session. Use their name naturally, at most once or twice.
 - That block is also the ONLY authority on which roles they hold. Never tell someone they hold a role it does not list, however strongly a thread implies it. Ask about the work itself instead ("who picks that up?"), not about a hat you have assumed they wear.
 - Reference ONLY the brief and this session's transcript. You have NO access to any database, graph, or other sessions. Never claim to "look something up".
@@ -114,7 +116,7 @@ Hard rules:
 - Set "thread_complete" true only when the thread just discussed is genuinely well covered.
 
 Respond with ONLY a JSON object, no prose:
-{"classification":"clear|vague|tangent|dont_know","action":"opener|redirect|probe|reconcile|acknowledge|close","utterance":"<the next thing you say>","active_thread_id":"<thread id or null>","thread_complete":<true|false>}`;
+{"classification":"clear|vague|tangent|dont_know|not_mine","action":"opener|redirect|probe|reconcile|acknowledge|close","utterance":"<the next thing you say>","active_thread_id":"<thread id or null>","thread_complete":<true|false>}`;
 
 export interface UserPromptInput {
   brief: SessionBrief;
@@ -170,6 +172,15 @@ export function buildUserPrompt(input: UserPromptInput): string {
     parts.push(`Name: ${identity.display_name} (call them ${firstName(identity)})`);
     parts.push(`Role(s): ${rolePhrase(identity)}`);
     parts.push("You already know this. Do NOT ask for their name or role.");
+    parts.push("");
+  }
+  // Before the brief, not inside it (P17c / WC-26). The brief is a list of things we still want;
+  // this is the list of things we already have, and a model that reads the wants first starts
+  // composing questions before it learns which ones are already answered.
+  if (brief.known_facts?.length) {
+    parts.push("=== WHAT WE ALREADY KNOW (from their earlier sessions) ===");
+    for (const f of brief.known_facts) parts.push(`  - ${f}`);
+    parts.push("Do NOT ask for any of this as though it were new. To check one, state it and ask what changed.");
     parts.push("");
   }
   parts.push("=== SESSION BRIEF ===");

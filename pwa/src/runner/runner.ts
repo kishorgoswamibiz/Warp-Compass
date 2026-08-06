@@ -27,7 +27,14 @@ import {
 } from "./prompts";
 import { Session } from "./session";
 import { LLMError } from "./types";
-import type { ActionKind, Identity, LiveDecision, LLMProvider, SessionBrief } from "./types";
+import type {
+  ActionKind,
+  Classification,
+  Identity,
+  LiveDecision,
+  LLMProvider,
+  SessionBrief,
+} from "./types";
 
 /** The final sign-off spoken once the person has already tapped "End & save". */
 export const CLOSING_UTTERANCE =
@@ -41,6 +48,17 @@ export const CLOSING_UTTERANCE =
  */
 export const THREADS_DONE_UTTERANCE =
   'That\'s really helpful — I think we\'ve covered everything for today. Please tap "End & save" below now so your answers are saved before you go.';
+
+/**
+ * The two classifications that mean "stop asking me this" (P17c / WC-25).
+ *
+ * `dont_know` scopes to the one thread, `not_mine` to the whole piece of work — a distinction the
+ * brain acts on when it plans the next brief. In-session both do the same thing, because either way
+ * the question just asked is spent.
+ */
+export function isRefusal(c: Classification): boolean {
+  return c === "dont_know" || c === "not_mine";
+}
 
 export interface TurnResult {
   /** What the agent says next (after the guard layer). */
@@ -157,11 +175,23 @@ export class Runner {
       kind,
       thread_id,
       agent_utterance: agentUtterance,
+      // P17c / WC-25. The classification was already being computed every turn and thrown away;
+      // persisting it is what lets a refusal outlive the session. It only bites paired with a
+      // `thread_id`, which is why `tangent` — the one classification that nulls the thread — can
+      // never suppress anything: drifting off a question is not refusing it.
+      classification: decision.classification,
     });
 
     // ── guard layer ───────────────────────────────────────────────────────
     // The model reports whether the just-discussed thread is now covered.
     if (decision.thread_complete && threadAtQuestion) s.markCovered(threadAtQuestion);
+    // A refusal closes the thread whatever the model reported (P17c / WC-25). `thread_complete`
+    // asks "is this well covered?", and a model that has just been told *"that's not my job"*
+    // reasonably answers no — which left the thread current and re-askable, the mechanic behind
+    // *"I told you I do not act as a delivery specialist. Why you're not trying to understand?"*
+    // A refused question is finished with; that is a rule, not a judgement call, so it lives here
+    // rather than in the prompt. The cross-round half is the brain's (`lifecycle.declined_threads`).
+    if (isRefusal(decision.classification) && threadAtQuestion) s.markCovered(threadAtQuestion);
 
     let effectiveAction: ActionKind = decision.action;
     let utterance = decision.utterance;

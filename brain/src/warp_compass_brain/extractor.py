@@ -76,6 +76,15 @@ Rules:
   OBJECTIVE_FOR the stage it is about) and record it AS STATED. Do not soften it, correct it, or
   reconcile it against anything else in the graph — the gap between what one person expects and
   what another describes is a finding worth reporting.
+- A DENIAL IS NOT A FACT ABOUT THE SPEAKER. When the answer says the speaker does NOT do something
+  ("that's not my job", "I don't do the demos", "QA handles that, not me"), do NOT emit an Activity
+  attributed to them and do NOT emit a PERFORMS edge from their role to it. A denial asserts
+  nothing about what they do. If they name WHO does own it, that IS a fact: emit that Role and the
+  PERFORMS edge to THEM, plus the Activity. If they name nobody, emit nothing for that work — an
+  empty result is the correct output for "I don't do that". NEVER read a denial as a description:
+  "I do not prepare the project timeline" must never produce a timeline activity performed by the
+  speaker. That misreading is how a role ends up owning work its holder has explicitly refused, and
+  the graph then asks them about it again every round.
 - If the answer contains no process knowledge, return {"nodes":[],"relations":[]}.
 - No prose, no markdown — JSON only."""
 

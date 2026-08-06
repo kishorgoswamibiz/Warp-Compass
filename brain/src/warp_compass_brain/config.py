@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # not a departed colleague's — but still capped, because a newly joined holder of a well-covered
     # role would otherwise get a brief made entirely of other people's accounts (phase-16 R6).
     planner_role_max: int = 4
+    # P17c / WC-26: how many "you already told us this" lines a brief carries. This is the
+    # interviewer's memory of earlier sessions, so it is capped by prompt budget, not by usefulness
+    # — every line is a fact the graph really holds. Facts about the activities THIS brief walks are
+    # emitted first, so lowering it degrades gracefully: the least relevant memories drop off first.
+    planner_known_facts_max: int = 12
 
     # --- Review queues (Phase 2) ---
     quarantine_path: str = "./_state/quarantine.jsonl"

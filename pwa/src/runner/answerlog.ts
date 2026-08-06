@@ -7,7 +7,7 @@
  * Node-only `validate.ts` checks a built log against `contracts/answer-log.schema.json`.
  */
 
-import type { AnswerKind, AnswerLog, AnswerLogEntry } from "./types";
+import type { AnswerKind, AnswerLog, AnswerLogEntry, Classification } from "./types";
 
 export const ANSWER_LOG_SCHEMA_VERSION = "1.0.0";
 
@@ -33,15 +33,21 @@ export class AnswerLogBuilder {
     thread_id: string | null;
     agent_utterance: string | null;
     audio_ptr?: string | null;
+    classification?: Classification;
   }): void {
-    this.entries.push({
+    const entry: AnswerLogEntry = {
       thread_id: e.thread_id,
       kind: e.kind,
       agent_utterance: e.agent_utterance,
       raw_answer: e.raw_answer,
       audio_ptr: e.audio_ptr ?? null,
       ts: e.ts,
-    });
+    };
+    // Omitted rather than written as null when absent (P17c). The schema types this as a bare
+    // string enum, so a literal null would fail validation — and an absent key is the honest
+    // encoding of "this entry predates the field", which is what the seeded identity entry is.
+    if (e.classification) entry.classification = e.classification;
+    this.entries.push(entry);
   }
 
   /**

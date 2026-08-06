@@ -21,9 +21,11 @@ snapshot (pure, deterministic, DB-free in tests):
 The Planner (P4) pulls each persona's routed threads at high priority. ``corroborate()`` is the
 companion *write* pass (confidence promotion) the operator/cycle runs; everything else is read-only.
 
-Persona scoping = provenance ``said_by`` (ADR #17; there is no ``:Persona`` node). A persona
-*owns* a role when it performs that role's activities **or declared that role at onboarding**
-(P16a, ADR #34) — merely *mentioning* a role is still not being it.
+Persona scoping = provenance ``said_by`` (ADR #17; there is no ``:Persona`` node). A persona *owns*
+a role when it **declared that role at onboarding** (P16a, ADR #34; WC-28/ADR #42 made declaration
+the only source rather than one of two) — merely *mentioning* a role, or describing what it does,
+is not being it. Where there are no declarations at all — a pre-P15a bus, most unit tests —
+ownership falls back to having contributed the role's activities, which is what P9 shipped with.
 """
 
 from __future__ import annotations
@@ -242,18 +244,17 @@ class CrossPersonaEngine:
                 # question is still worth asking (the switch is where dual-hat work really leaks),
                 # so route a differently-worded twin instead of suppressing it.
                 #
-                # ⚠ DECLARED on BOTH sides, never inferred (P17a, ADR #38). `_role_owner_personas`
-                # deliberately counts contribution as ownership so that ROUTING never misses a real
-                # holder — right for choosing who to ask, wrong for telling somebody to their face
-                # which hats they wear. Describing what QA does gives you provenance on QA's
-                # activities, which made a Solution Architect who declared one role hear *"when you
-                # switch from your Quality Assurance Head hat…"*, and a Business Analyst hear the
-                # Delivery Specialist version three times after denying it twice — *"I told you I
-                # do not act as a delivery specialist. Why you're not trying to understand?"*
+                # ⚠ DECLARED on BOTH sides, never inferred (P17a, ADR #38). Describing what QA does
+                # gives you provenance on QA's activities, which made a Solution Architect who
+                # declared one role hear *"when you switch from your Quality Assurance Head hat…"*,
+                # and a Business Analyst hear the Delivery Specialist version three times after
+                # denying it twice — *"I told you I do not act as a delivery specialist. Why you're
+                # not trying to understand?"*
                 #
-                # Routing is untouched: everyone below still receives a thread. Only the WORDING
-                # narrows, and a non-declarer gets the standard confirm copy, which is answerable
-                # ("do you receive it?") instead of insulting.
+                # Since WC-28 (ADR #42) the receiving side is declared too, so `recv_personas` is
+                # the same set the loop below iterates and `dual_hat` turns on the GIVING side
+                # alone. Both memberships are kept explicit: on a declaration-less bus the loop
+                # falls back to contribution, and the dual-hat copy must not follow it there.
                 declared_owners = self._declared_owners(snap)
                 giver_personas = (
                     declared_owners.get(giver_role_id, set()) if giver_role_id else set()
@@ -391,33 +392,58 @@ class CrossPersonaEngine:
         return owners
 
     def _role_owner_personas(self, role_id: str, snap) -> set[str]:
-        """Personas that *own* a role: those who contributed its activities, **or declared it**.
+        """Personas that *own* a role — **declared**, once the engagement knows who its people are.
 
-        Merely mentioning a role (provenance on the Role node) is still not owning it — that part of
-        the original rule stands, and the test for it stands with it. What changed in P16a is that
-        **declaring** a role at onboarding is now sufficient on its own (ADR #34).
+        Merely mentioning a role (provenance on the Role node) is not owning it; that rule is as old
+        as P9 and its test still stands. P16a added that **declaring** a role at onboarding is
+        sufficient on its own (ADR #34), for a failure worth keeping in view: a person genuinely the
+        Technical Specialist, whose dev work never earned a ``PERFORMS`` edge under that hat because
+        the extractor cannot see who is speaking (phase-16 §2 Finding 1), owned nothing. A
+        colleague's "I hand the build to the Technical Specialist" found no owner,
+        ``_handoff_state`` returned ``route_discoverer``, and the **colleague** was asked *"who
+        would know?"* every round while the real person was never asked at all.
 
-        The reason is the failure this used to cause. A person who is genuinely the Technical
-        Specialist, but whose dev work never earned a ``PERFORMS`` edge under that hat — because the
-        extractor cannot see who is speaking (§2 Finding 1 of the phase-16 plan) — owned nothing. So
-        a colleague's "I hand the build to the Technical Specialist" found no owner,
-        ``_handoff_state`` returned ``route_discoverer``, and the **colleague** was asked
-        *"who would know?"* every round while the real person was never asked at all. Inferring
-        ownership from activities put a deterministic fact (they told us who they are) behind a
-        probabilistic one (did extraction happen to attribute it).
+        **What P17d changes: declaration REPLACES the activity inference, it no longer unions with
+        it (WC-28, ADR #42).** Contributing a role's activities was the P9 proxy for holding it,
+        from a time with one voice in the graph and no declarations to consult. It is the same
+        WC-R5 over-reach that ADR #37 removed from ``planner._persona_summary`` and ADR #38 from the
+        dual-hat copy — describing what a colleague's role does gives you provenance on that role's
+        activities — and this was the last place still trusting it.
 
-        Declaration is the strongest evidence available and it costs nothing to consult. The trade
-        (phase-16 R1): tick a role you don't hold and you become its routing target — which
-        ``cli coverage`` surfaces as a declared owner with no activities, rather than hiding it.
+        It bit exactly as you would expect the moment two people were on the bus. Kishor said *"the
+        Delivery Specialist creates the pre-sales timeline"*, which put his provenance on
+        ``act.create-pre-sales-timeline``; ``role.delivery-specialist`` PERFORMS that activity; so
+        the Business Analyst was an owner of the Delivery Specialist role, and **every one of the
+        four handoff-confirm threads went to both people**. His brief opened with *"It sounds like
+        Business Analysis Specialist hands 'Compile Final BRD' over to you — do you receive it?"* —
+        a question about the handoff **he had just described making**, addressed to him as its
+        recipient. Two more were addressed to an Account Management Specialist and a Solution
+        Architect, roles nobody in the engagement holds at all.
+
+        The narrow fix (prefer declared owners, fall back per-role) fixes only the first of those:
+        a role with **no** declared holder would still resolve to whoever described its work, so the
+        AMS and SA threads would keep going to both. A role nobody declared has not been interviewed
+        — which is precisely what ``route_discoverer`` means — so the fallback has to go.
+
+        The activity inference survives only where there is no declaration to consult: a pre-P15a
+        bus, or a graph loaded with no bus at all (most unit tests). ``lifecycle.declared_roles``
+        lists **every** live participant, including one who ticked nothing, so on any real bus this
+        is the declared path and the fallback is dead code.
+
+        The trade (phase-16 R1) is unchanged and now load-bearing: tick a role you don't hold and
+        you become its routing target — which ``cli coverage`` surfaces as a declared owner with no
+        activities, rather than hiding it.
         """
-        personas: set[str] = set()
-        for act_id in snap.out(role_id, EdgeType.PERFORMS):
-            card = snap.nodes.get(act_id)
-            if card is not None:
-                personas.update(p.said_by for p in card.provenance)
-        personas |= self._declared_owners(snap).get(role_id, set())
+        if self._declared:
+            owners = self._declared_owners(snap).get(role_id, set())
+        else:
+            owners = set()
+            for act_id in snap.out(role_id, EdgeType.PERFORMS):
+                card = snap.nodes.get(act_id)
+                if card is not None:
+                    owners.update(p.said_by for p in card.provenance)
         # The registry is vocabulary, not a person who can be asked anything (see `roles.py`).
-        return personas - {REGISTRY_SAID_BY}
+        return owners - {REGISTRY_SAID_BY}
 
     def _source_personas(self, activity_id: str, snap) -> set[str]:
         card = snap.nodes.get(activity_id)

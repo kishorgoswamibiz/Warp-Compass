@@ -242,6 +242,58 @@ def all_answer_entries(bus: FolderBus) -> list[AnswerEntry]:
     return entries
 
 
+#: Answer-log classifications that mean "stop asking me this" (P17c / WC-25). The value is the
+#: SCOPE of the refusal: ``"thread"`` closes the one question, ``"node"`` closes every question
+#: about that piece of work. See `Classification` in `pwa/src/runner/types.ts` for why the two are
+#: separate — one is a missing detail, the other is work the person does not do.
+REFUSAL_SCOPES: dict[str, str] = {"dont_know": "thread", "not_mine": "node"}
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """One recorded "stop asking me this", scoped to a thread or to the whole piece of work."""
+
+    thread_id: str
+    #: ``"thread"`` or ``"node"`` — see :data:`REFUSAL_SCOPES`.
+    scope: str
+
+
+def refusals(bus: FolderBus) -> dict[str, set[Refusal]]:
+    """``persona_id -> what they have refused``, read from every Answer Log (live + archived).
+
+    **The Answer Logs are the source of truth, so this is derived, never stored.** A refusal is not
+    a new kind of state to keep in sync — it is already written, immutably, in the log entry whose
+    ``classification`` says so. Re-deriving it each round means it survives a graph rebuild for free
+    (ADR #4), needs no migration, and cannot drift from what the person actually said.
+
+    **Per persona, never global** (phase-17 §6). One Business Analyst not doing something is not
+    evidence that no Business Analyst does it — that is exactly the difference between a person's
+    scope and a role's, and collapsing it would silence a question for the whole engagement because
+    one holder happened to be asked first.
+
+    A refusal needs a ``thread_id``: a refusal with nothing to point at cannot suppress anything.
+    That is also what makes ``tangent`` structurally harmless here — it nulls the thread in
+    ``runner.respond``, so drifting off a question can never be mistaken for refusing it.
+
+    Archived folders are included for the same reason ``all_answer_entries`` includes them: a
+    retired colleague's *"that was never my job"* is still true about the business.
+    """
+    out: dict[str, set[Refusal]] = {}
+    for participant_id, folder in _log_folders(bus):
+        profile = _read_json(folder / "profile.json")
+        persona_id = str(profile.get("persona_id") or participant_id)
+        log_dir = folder / "answer_logs"
+        if not log_dir.is_dir():
+            continue
+        for path in sorted(p for p in log_dir.iterdir() if p.suffix == ".json"):
+            for e in _read_json(path).get("entries", []):
+                scope = REFUSAL_SCOPES.get(str(e.get("classification") or ""))
+                thread_id = e.get("thread_id")
+                if scope and isinstance(thread_id, str) and thread_id:
+                    out.setdefault(persona_id, set()).add(Refusal(thread_id, scope))
+    return out
+
+
 def _log_folders(bus: FolderBus) -> list[tuple[str, Path]]:
     """``(participant_id, folder)`` for every live participant, then every archived one."""
     out = [(pid, bus.participant_dir(pid)) for pid in bus.list_participants()]

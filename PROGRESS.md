@@ -10,8 +10,25 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL BUILD PHASES DONE (P0–P15) + P16a + P16a-bis + P17a.** **P16b–d and P17b/P17c
-  remain PLAN ONLY.**
+- **Phase:** **ALL BUILD PHASES DONE (P0–P15) + P16a + P16a-bis + P17a–P17d.** **P16b–d remain
+  PLAN ONLY. Every finding from the tester sessions is now closed in code.**
+  **⚠ P17c IS NOT LIVE UNTIL THE PWA IS DEPLOYED (06 Aug 2026).** It changes both contracts, so the
+  two planes ship together and the phone must be **fully reopened** afterwards (cached service
+  worker). Until then a refusal still evaporates — the brain is ready, nothing is writing to it.
+  **✅ P17c — a refusal sticks, and the brief remembers (WC-25/WC-26, ADRs #43/#44).** The live model
+  had been classifying every refusal since P5 and the runner discarded it; it is now persisted, with
+  two scopes (`dont_know` closes the question, `not_mine` the whole piece of work). And the brief
+  gained `known_facts` — deterministic one-liners of what the person already told us, rendered above
+  the threads and forbidden to be asked cold.
+  **✅ P17d — one handoff now has one recipient (06 Aug 2026, WC-28 / ADR #42).** The owner found the
+  first post-rebuild briefs giving the project manager's question to the Business Analyst as well.
+  It was not one duplicate: **all four** `handoff_confirm` threads were in **both** briefs, because
+  `crosspersona._role_owner_personas` counted *describing* a role's work as *holding* the role — so
+  the BA was asked to confirm he **receives** the handoff he had just described **making**. Role
+  ownership for routing is now the onboarding declaration and nothing else; a role nobody declared
+  is `route_discoverer`, as that verdict always meant. **The onboarding chips are consequently
+  load-bearing** — an unticked role now receives no handoff confirms (risk R5; check `cli coverage`
+  after each new participant). Both live briefs regenerated; they share no thread and no opener.
   **⚠ READ FIRST IF YOU ARE ABOUT TO RUN A LIVE SESSION (06 Aug 2026).** Two testers ended their
   second sessions early; the transcripts are in `sample/`. Every complaint traced to the Session
   Brief, not to the model — the brief was telling the interviewer that a Solution Architect who
@@ -324,6 +341,107 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 06 Aug 2026 · agent:opus-p17c — P17c: refusals stick, and the brief remembers (WC-25/WC-26)
+
+**Did.** The last two open findings from the tester sessions, both contract changes, both planes.
+
+**WC-25 — a refusal is now data (ADR #43).** The live model has classified every answer since P5 and
+`runner.respond` computed it every turn and *threw it away*, because `answer-log.schema.json` had
+nowhere to put it. So *"the project timeline is not my job"* — three times in one session — reached
+the brain as nothing. Now: optional `classification` on the log entry (back-compatible; an old
+cached phone still writes a valid log), `lifecycle.refusals()` re-derives per-persona refusals from
+every log live and archived, and the Planner drops the matching threads.
+
+**⚠ Two scopes, where the plan said one.** `dont_know` closes the question; `not_mine` closes the
+whole piece of work. P17a clusters three threads onto a node, so thread-scope alone re-asks the other
+two next round — the same repetition in a new costume — while node-scoping a mere "don't know" would
+silence an activity the person really performs over one hazy detail. One extra enum value removes
+both failure modes, and the model already had to draw that line to obey P17a's denial rule.
+Also: the runner now closes a refused thread in-session whatever `thread_complete` said, and the
+extractor gained a negation rule so a denial stops minting the `PERFORMS` edge it denies.
+
+**WC-26 — the brief carries memory (ADR #44).** `known_facts` on the Session Brief: deterministic
+one-liners the brain reads off the graph (*'You do "Compile Final BRD" (in Pre-sales Phase) —
+produces Final BRD; hands to Delivery Specialist'*), rendered **above** the brief as
+`WHAT WE ALREADY KNOW` with a hard rule against asking any of it cold. Never model-written — this is
+injected as memory and believed, so a hallucinated line asserts something the person never said.
+
+**The bug worth remembering.** An end-to-end run against the live graph — no unit test would have
+caught it — showed Kishor refusing "Provide Technical Solutions", all three threads correctly
+vanishing, and `known_facts` then opening with *'You do "Provide Technical Solutions"'*. The fix for
+WC-26 was re-asserting the exact thing WC-25 exists to stop, and in the worse position: a fact is
+stated, not asked, so there is nothing to say "no" to. A `not_mine` now removes the fact too.
+
+**Verified.** Brain 259 → **277 green**, PWA 75 → **85 green**, ruff clean, `tsc -b` and `vite build`
+clean. Two cross-plane guards added, because the classification enum now has three copies (contract,
+`Classification` union, live prompt) and the prompt copy is the one that silently disables the
+feature if it drifts. End-to-end against the live graph: a `not_mine` removes all 3 threads on the
+node, leaks 0 into reserve, and drops its `known_facts` line. Both live briefs regenerated
+(`logs_ingested: 0` — no re-ingest, graph untouched); they now carry 7 and 12 known facts.
+
+**⚠ NOT LIVE UNTIL THE PWA IS DEPLOYED.** The brain half is inert until a phone writes
+`classification`. `known_facts` is already in the briefs on the bus but is only rendered by a runner
+that knows the field. Deploy both planes together, then **fully reopen the phone** (cached service
+worker — `PROMPTS.md`). Until then the next session behaves exactly as today's.
+
+**Next.** Nothing from the tester sessions is left open. WC-04 (blind extraction → P16b) is the
+biggest remaining known cause of graph noise.
+
+**Gotchas.** (1) A refusal is **derived, never stored** — it lives in the immutable Answer Log and is
+re-read each round, so it survives a `rebuild-graph` for free and cannot drift from what was said.
+(2) It is **per persona, never global**: one BA not doing something is not evidence that no BA does.
+(3) `not_mine` is the strongest signal in the system — it permanently stops a line of questioning for
+that person. The prompt says to use it only when they mean it, and that instruction is load-bearing.
+
+### 06 Aug 2026 · agent:opus-p17d — P17d: one handoff, one recipient (WC-28, ADR #42)
+
+**Reported by the owner**, off the first briefs generated after the P17b rebuild: *the correct
+question is on the project manager's screen, and the same question is on the Business Analyst's
+screen.* Investigating it found the duplicate was the visible corner of a bigger fault — **all four**
+`handoff_confirm` threads were in **both** briefs, and two of them named roles nobody in the
+engagement holds (Account Management Specialist, Solution Architect).
+
+**Cause.** `crosspersona._role_owner_personas` counted *"has provenance on an activity this role
+PERFORMS"* as owning the role. Provenance means somebody **said something about** a node, not that
+they **do** it. Kishor's *"the Delivery Specialist creates the pre-sales timeline"* stamped his
+provenance on `act.create-pre-sales-timeline`, so the Business Analyst owned the Delivery Specialist
+role — and his brief opened by asking him to confirm he **receives** the handoff he had just
+described **making**. This is WC-R5's over-reach again: ADR #37 removed it from `_persona_summary`,
+ADR #38 from the dual-hat copy, and routing was the last site still trusting it, because P16a
+*added* declaration (ADR #34) to the P9 inference instead of replacing it. One voice on the bus hid
+it completely.
+
+**Did.** ADR #42 — declaration is the only source of role ownership. A role nobody declared has no
+owner and its inbound handoffs return `route_discoverer`, which is what that verdict has always
+meant; those two now become `handoff_trace` threads back to whoever raised them, asking *"who would
+know how they handle it?"* rather than *"do you receive it?"*. The contribution walk is kept only
+for a bus with no declarations at all (pre-P15a, unit tests) and is unreachable in production, since
+`lifecycle.declared_roles` lists every live participant. Touched `crosspersona.py` (the fix),
+`planner.py` + `coverage.py` (stale cross-references only).
+
+**⚠ The narrow fix is a trap and was rejected.** "Prefer declared owners, fall back per-role" repairs
+the two roles somebody holds and leaves the two ownerless ones routing to whoever narrated them —
+half the bug, and the half that reads worst in a session.
+
+**Verified.** Five new tests in `test_role_scoping.py`; the four that assert the fix all fail on the
+old code (checked by stashing the source change), the fifth fences the legacy branch. Suite 254 →
+**259 green**, ruff clean. Both live briefs regenerated with `cli run-round` — `logs_ingested: 0`,
+so nothing was re-ingested and the graph is untouched. **No thread id and no opener string is now
+shared between the two briefs.** Rahul keeps `compile-final-brd`; `provide-technical-solutions`
+moved from Rahul's brief to Kishor's, where it belongs. Pre-fix copies of both briefs are in the
+session scratchpad if a diff is wanted.
+
+**Next.** P17c (WC-25 denials, WC-26 `known_facts`) is unchanged and still the top of the queue.
+
+**Gotchas.** (1) The onboarding chips are now **load-bearing for routing** — an unticked role gets
+no confirms at all, where before it got the wrong ones. Check `cli coverage` after each new
+participant for a role with interviewed owners and no `declared_by` (risk R5, phase-17 §8).
+(2) `cli plan` only prints; `cli run-round` is what writes briefs to the bus. Re-running a round
+after the logs are already in `ingested_logs` is free and safe — it re-plans and redistributes
+without calling DeepSeek. (3) *Lesson worth keeping:* a heuristic that is merely imprecise with one
+voice in the graph becomes actively wrong with two. Re-audit the single-source proxies before every
+headcount increase, not after.
 
 ### 06 Aug 2026 · agent:opus-p17a — P17b LANDED: the graph was rebuilt, and the plan for it was wrong
 

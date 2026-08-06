@@ -123,11 +123,14 @@ def build_coverage(graph: GraphStore, declared_roles=None) -> CoverageReport:
     def owners_of(role_id: str) -> list[str]:
         """Personas that own the role by having *described its work*.
 
-        Deliberately narrower than ``crosspersona._role_owner_personas``, which since P16a also
-        counts a declared role as owned. This report exists to show whether anyone has actually been
-        **interviewed** as the role, so declaration is reported separately (``declared_by``) rather
-        than folded in — merging them would hide precisely the case P16a introduced, a role with a
-        routing target but no described work.
+        Deliberately *different* from ``crosspersona._role_owner_personas``, which routes on the
+        declaration alone (P16a/ADR #34, narrowed to declaration-only by WC-28/ADR #42). This report
+        exists to show whether anyone has actually been **interviewed** as the role, so declaration
+        is reported separately (``declared_by``) rather than folded in — and the two columns now
+        answer genuinely different questions. A role with ``declared_by`` and no owners is P16a's
+        case, a routing target with no described work; a role with owners and no ``declared_by`` is
+        WC-28's, work described *about* a role nobody holds, which no longer routes anywhere and
+        is exactly the invite this report exists to prompt.
 
         The seeded registry is excluded: it is vocabulary, not a person who can be interviewed.
         """

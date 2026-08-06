@@ -484,30 +484,168 @@ behaviour on everything the prompt governs, not just the case that motivated it 
 check has to count what you were **not** trying to change. The node-type table caught this; a check
 that only looked at the activity count would have called it a clean win.*
 
-## 6. P17c — memory and denials (PLAN ONLY)
+## 6. P17c — memory and denials ✅ BUILT 06 Aug 2026
 
-Both items change a contract, so PWA and brain ship together, and a phone must be **fully reopened**
-after deploy (cached service worker — `PROMPTS.md`).
+Two complaints from the same sessions, and they are opposites: one is *"stop asking what I refused"*
+(Finding 5), the other *"stop re-asking what I answered"* (Finding 7). Both change a contract, so
+**PWA and brain ship together, and a phone must be fully reopened after deploy** (cached service
+worker — `PROMPTS.md`).
 
-**Denial capture (Finding 5).**
-- `answer-log.schema.json`: add an optional `classification` property (`clear|vague|tangent|dont_know`).
-  Optional and back-compatible, so a device on old cached JS still writes a valid log — the same
-  discipline `role_titles` → `role_title` already uses.
-- `runner.respond()` writes `decision.classification` into the entry (~2 lines).
-- Brain: `dont_know` on a thread with a known node/field records a per-persona declined entry; the
-  Planner filters those threads out for that persona. **Per persona, never global** — one BA not doing
-  something is not evidence that no BA does.
-- Extractor: a negation rule. *"When the answer denies doing something, do not emit PERFORMS for the
-  speaker; if they name who does own it, emit that Role and the PERFORMS edge to them."*
+### 6.1 A refusal is data, with two scopes (WC-25, ADR #43)
 
-**Known facts (Finding 7).**
-- `session-brief.schema.json`: add `known_facts: string[]` (additive; the file is
-  `additionalProperties: false`, so it must be declared).
-- Planner generates 8–12 deterministic one-liners from the persona's subgraph — *"You create User Story
-  Documents → hand to Solution Architect"*. Deterministic, not LLM-written: this is a memory, and a
-  hallucinated memory is worse than none.
-- `briefDigest()` renders a `=== WHAT WE ALREADY KNOW ===` block; `SYSTEM_PROMPT` gains a rule that
-  nothing listed there may be asked cold — to confirm it, state what you have and ask what changed.
+**The signal already existed.** `SYSTEM_PROMPT` has classified every answer since P5 and
+`runner.respond` computed it every turn — then discarded it, because `answer-log.schema.json` had
+nowhere to put it. So *"the project timeline is not my job"*, said three times in one session,
+reached the brain as nothing at all.
+
+**The plan said one scope; two shipped.** `dont_know` alone cannot carry this. P17a clusters up to
+three threads onto one node (§4.4), so suppressing only the refused thread returns the other two
+next round — the same repetition wearing a different hat. Node-scoping every `dont_know` is wrong in
+the other direction: it silences an activity the person genuinely performs because they were hazy on
+one detail. So the enum splits:
+
+| classification | means | closes |
+|---|---|---|
+| `dont_know` | "I don't know THIS detail" — the work is still theirs | that thread |
+| `not_mine` | "this work is not mine" | every thread on that node, **and its `known_facts` line** |
+
+The model already has to draw that line to obey the denial rule it has carried since P17a; the enum
+value just makes the answer durable. As built:
+
+- `answer-log.schema.json` — optional `classification`, so a phone on old cached JS still writes a
+  valid log (the same discipline `role_titles` → `role_title` used).
+- `runner.respond` writes it, and `isRefusal` closes the thread in-session **whatever
+  `thread_complete` said** — a model just told "that's not my job" reasonably reports the thread
+  incomplete, which is what left it current and re-askable.
+- `lifecycle.refusals(bus)` re-derives `persona_id -> {Refusal}` from every log, live and archived.
+  **Derived, never stored:** it is already immutable in the Answer Log, so it survives a rebuild for
+  free (ADR #4) and cannot drift. **Per persona, never global** — one BA not doing something is not
+  evidence that no BA does.
+- `Planner._refused` resolves refused thread ids to nodes, preferring the live candidates' own
+  `node_id` and falling back to reading the node id out of the thread id — which is what keeps a
+  `not_mine` biting after a colleague answers the exact field it named. `role.`/`orphan.` prefixes
+  are stripped first: they record why a thread reached you, not what was asked.
+- Extractor: a negation rule, so *"I do not prepare the project timeline"* stops minting the
+  `PERFORMS` edge it denies.
+
+### 6.2 The brief remembers (WC-26, ADR #44)
+
+`session-brief.schema.json` gains `known_facts`; the Planner writes one line per activity in the
+persona's **own** subgraph, read straight off edges and attributes:
+
+> `You do "Compile Final BRD" (in Pre-sales Phase) — produces Final BRD; hands to Delivery Specialist`
+
+Rendered **above** the brief as `=== WHAT WE ALREADY KNOW ===`, with a hard rule: never ask for any
+of it cold; to confirm one, state it and ask what changed. Above, because a model that reads the
+wants first starts composing questions before it learns which are already answered. Ordered by the
+activities *this* brief walks, because that is where memory changes the next question — *"what does
+X produce?"* becomes *"you said X produces Y — who picks it up?"* Capped at
+`planner_known_facts_max` (12), so a fifteen-activity person gets a block rather than their subgraph.
+
+**Deterministic, never model-written.** It is injected as memory and believed as established fact, so
+a hallucinated line does not waste a turn — it asserts something the person never said.
+
+### 6.3 Where the two halves meet
+
+An end-to-end run against the live graph — not any unit test — caught the obvious composition bug:
+Kishor refuses "Provide Technical Solutions", all three threads vanish, and `known_facts` then opens
+with *'You do "Provide Technical Solutions"'*. That is WC-25 reappearing inside the fix for WC-26, in
+the worse position, since a fact is asserted rather than asked. A node-scoped refusal now removes the
+fact as well; a `dont_know` leaves it standing. Pinned by
+`test_a_disowned_activity_is_not_then_described_back_to_them_as_theirs`.
+
+### 6.4 Tests
+
+18 in `brain/tests/test_memory_and_denials.py` and 10 in `pwa/src/runner/denials.test.ts`, including
+two cross-plane guards: `REFUSAL_SCOPES` must be a subset of the contract enum, and the contract, the
+`Classification` union and the live prompt must list the same values — the prompt copy matters most,
+since a classification the model has never been shown is dead on arrival.
+
+### 6.5 Deploy
+
+**Not live until the PWA ships.** The brain half is inert until a phone writes `classification`;
+`known_facts` reaches the brief immediately but is only rendered by a runner that knows the field.
+Deploy both, then fully reopen the phone.
+
+---
+
+## 6b. P17d — one handoff, one recipient (WC-28) ✅ BUILT 06 Aug 2026
+
+**Found by the owner in the first briefs generated after the P17b rebuild**, in one sentence: *the
+correct question is on the project manager's screen, and the same question is on the Business
+Analyst's screen.* It was not one duplicate — **all four** `handoff_confirm` threads were in both
+briefs, so the shared question at priority 1 was the visible corner of a routing rule that had no
+notion of who holds a role.
+
+### 6b.1 What the briefs said
+
+| thread | receiving role | should reach | actually reached |
+|---|---|---|---|
+| `act.compile-final-brd` | Delivery Specialist | Rahul | **Rahul + Kishor** |
+| `act.provide-technical-solutions-and-effort-estimates` | Business Analysis Specialist | Kishor | **Rahul + Kishor** |
+| `act.create-pre-sales-timeline` | Account Management Specialist | *nobody holds it* | **Rahul + Kishor** |
+| `act.document-requirements-and-create-brd` | Solution Architect | *nobody holds it* | **Rahul + Kishor** |
+
+Row 1 is the one the owner saw, and it is the sharpest: Kishor is the Business Analysis Specialist,
+so his brief opened by asking him to confirm he **receives** the handoff he had just described
+**making** — *"It sounds like Business Analysis Specialist hands 'Compile Final BRD' over to you —
+do you receive it, and what do you do with it next?"*
+
+### 6b.2 Cause
+
+`crosspersona._role_owner_personas` treated *"has provenance on an activity this role PERFORMS"* as
+owning the role. Provenance means **somebody said something about this node**, not **somebody does
+it**. Kishor's answer *"the Delivery Specialist creates the pre-sales timeline"* put his provenance
+on `act.create-pre-sales-timeline`, which `role.delivery-specialist` PERFORMS — so he owned the
+Delivery Specialist role, and every handoff into it reached him.
+
+This is **WC-R5's over-reach**, the same one ADR #37 removed from `_persona_summary` and ADR #38
+from the dual-hat copy. Routing was the last site still trusting it, because P16a **added**
+declaration (ADR #34) to the P9 inference rather than replacing it — the union was defensible when
+the alternative was a real holder never being asked, and it was invisible while one person was on
+the bus. Two people is all it takes.
+
+### 6b.3 As built (ADR #42)
+
+`_role_owner_personas` returns the **declared** holders. The contribution walk survives only when
+`self._declared` is empty — a pre-P15a bus or a unit test — because there is genuinely no better
+signal there. On a real bus `lifecycle.declared_roles` lists every live participant, so the branch
+is unreachable.
+
+**The narrow version of this fix does not work.** "Prefer declared owners, fall back per-role"
+repairs rows 1 and 2 and leaves rows 3 and 4 exactly as they were: a role nobody declared still
+resolves to whoever narrated its work. A role with no declared holder **has not been interviewed**,
+which is the definition of `route_discoverer` — so the fallback has to go, not be demoted.
+
+Rows 3 and 4 now become `handoff_trace` threads back to whoever raised them, worded *"who would know
+how they handle it?"* instead of *"do you receive it?"* — a question the person can actually answer.
+
+### 6b.4 Tests
+
+Five in `test_role_scoping.py`, over `_narrator_graph()` — the live graph in miniature, one person
+narrating two colleagues' roles. Four fail on the pre-fix code:
+
+- `test_describing_a_colleagues_work_does_not_make_you_hold_their_role` — row 1;
+- `test_a_role_nobody_declared_has_not_been_interviewed_and_routes_to_the_discoverer` — rows 3/4,
+  the half a narrow fix would miss;
+- `test_a_confirm_thread_only_ever_reaches_a_declared_holder_of_the_receiving_role` — the general
+  invariant, so a future widening fails here rather than in someone's brief;
+- `test_one_handoff_confirm_never_lands_in_two_peoples_briefs` — the bug at the altitude the owner
+  saw it, asserted on `Planner.plan_all`;
+- `test_the_contribution_fallback_survives_only_where_nothing_is_declared` — the fence around the
+  legacy branch, which passes either way by design.
+
+### 6b.5 Verified against the live graph
+
+Both briefs regenerated with `cli run-round` (`logs_ingested: 0` — no re-ingest, graph untouched).
+No thread id and no opener string is now shared between them. `act.detailed-project-discovery` is
+still in both, correctly and with different copy: Kishor's own `missing_field` threads, Rahul's
+role-inherited *"Another Delivery Specialist described…"* — ADR #36 working as designed.
+
+**What it cost.** A genuine holder who never ticked their chip receives no confirms. That surfaces
+in `cli coverage` as a role with interviewed owners and no `declared_by`, and re-onboarding is one
+checkbox — where interrogating the wrong person about someone else's job is neither visible nor
+cheap. Same trade as R2 below, now applied to routing as well as to copy.
 
 ---
 
@@ -534,5 +672,6 @@ after deploy (cached service worker — `PROMPTS.md`).
 |---|---|---|
 | **R1** | Clustering amplifies a wrong node — three questions about an activity the person doesn't own, instead of one. | `_CLUSTER_MAX = 3` bounds it; §4.5's denial rule tells the model to drop the whole group on the first "not mine". **P17c is the real fix** — it makes the denial persist. |
 | **R2** | A person who genuinely holds two roles but ticked only one now gets the stranger copy for their own handoff. | Strictly better than the inverse (asserting a role they deny). `cli coverage` already surfaces declared-but-silent roles; the fix is re-onboarding, which is cheap. |
+| **R5** | P17d makes the onboarding chips load-bearing for routing: an untick is now silence, not just wrong copy. | Same mitigation as R2, promoted from cosmetic to functional. `cli coverage` shows a role with interviewed owners and no `declared_by` — check it after every new participant joins. The inverse (routing on narration) is what WC-28 was. |
 | **R3** | `reserve_threads` is now a set difference, not a slice — a bug here silently hides open gaps from the operator. | `test_threads_dropped_by_clustering_land_in_reserve` asserts disjointness and that reserve is the larger set. |
 | **R4** | P17b's rebuild re-runs extraction over settled text and could produce a *different* graph, not just a deduplicated one. | The logs are immutable and `_graph/` is in git — diff the before/after node counts per type and eyeball the activity list before committing. |

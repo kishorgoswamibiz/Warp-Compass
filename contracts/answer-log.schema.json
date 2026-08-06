@@ -23,6 +23,11 @@
           "agent_utterance": { "type": ["string", "null"], "description": "What the agent said (null for free narration)." },
           "raw_answer": { "type": "string", "description": "Verbatim transcript — the permanent truth; a misheard word is corrupted forever." },
           "audio_ptr": { "type": ["string", "null"], "description": "Optional pointer to the recorded audio blob.", "default": null },
+          "classification": {
+            "type": "string",
+            "enum": ["clear", "vague", "tangent", "dont_know", "not_mine"],
+            "description": "How the live model read this answer (P17c / WC-25). OPTIONAL and back-compatible on purpose: a phone running old cached JS omits it and still writes a valid log. The two that carry weight are the refusals — 'dont_know' (they don't know THIS detail) closes the one thread, 'not_mine' (this work is not theirs) closes every thread about that piece of work, both PER PERSONA and never globally. Without this field a refusal lives only in the transcript prose and the same question returns next round."
+          },
           "ts": { "type": "string", "format": "date-time" }
         }
       }

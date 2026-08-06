@@ -1,6 +1,6 @@
-"""P16a + P16a-bis — a declared role is owned, and a role's open questions reach every holder.
+"""P16a + P16a-bis + P17d — role ownership, and whose brief a role's questions land in.
 
-Two bugs, one wire (`profile.json` -> the brain):
+Three bugs, one wire (`profile.json` -> the brain):
 
 * **P16a / routing in.** A colleague hands work to a role a multi-hat person *declared* but whose
   work never earned a `PERFORMS` edge under that hat. Pre-P16a the role had no owner, so the
@@ -8,9 +8,12 @@ Two bugs, one wire (`profile.json` -> the brain):
 * **P16a-bis / routing out.** Persona scoping could only ask somebody about nodes they had already
   spoken about, so a role's open gaps never reached its *other* holders — three Business Analysts
   each describing a quarter of the role left a quarter that nobody was ever asked.
+* **P17d / routing to the wrong person (WC-28, ADR #42).** P16a *added* declaration to the P9
+  activity-contribution inference instead of replacing it, so describing a colleague's work still
+  made you an owner of their role. With two people on the bus every handoff-confirm went to both.
 
-The invariant that must survive both: **provenance stays keyed to the person.** Only *scoping* is
-role-shaped. See `docs/plan/phase-16-hat-fidelity.md` §2 Finding 5 and ADRs #34/#36.
+The invariant that must survive all three: **provenance stays keyed to the person.** Only *scoping*
+is role-shaped. See `docs/plan/phase-16-hat-fidelity.md` §2 Finding 5 and ADRs #34/#36/#42.
 
 No Neo4j, no network, no bus — declared roles go in as a plain dict.
 """
@@ -44,6 +47,8 @@ TS = "2026-08-05T10:00:00Z"
 
 BA = "Business Analysis Specialist"
 TECH = "Technical Specialist"
+DS = "Delivery Specialist"
+AMS = "Account Management Specialist"
 
 
 def _prov(persona, status=ConfidenceStatus.UNVERIFIED):
@@ -478,3 +483,136 @@ def test_coverage_render_stays_pure_ascii_with_declared_roles(capsys):
     text = render_coverage(build_coverage(g, {"persona.kishor": (TECH,)}))
     text.encode("cp1252")  # the operation that used to crash a Windows console
     assert text.isascii()
+
+
+# --- P17d / WC-28: describing a role's work is not holding the role -----------------------------
+
+
+def _narrator_graph():
+    """The 06 Aug 2026 live graph in miniature — one person narrating other people's roles.
+
+    Kishor is the Business Analysis Specialist. He described three things in one session:
+
+    * `Compile Final BRD` — **his own** work, which he hands to the Delivery Specialist;
+    * `Create Pre-sales Timeline` — what the **Delivery Specialist** does, in passing;
+    * `Add Pricing and Send Proposal` — what the **Account Management Specialist** does.
+
+    The last two are the whole problem. Talking about a colleague's work stamps your provenance on
+    it, so pre-P17d Kishor "owned" both of their roles. Rahul holds Delivery Specialist and declared
+    it; nobody in the engagement is an Account Management Specialist at all.
+    """
+    g = FakeGraphStore()
+    _role(g, "role.ba", BA)
+    _role(g, "role.ds", DS)
+    _role(g, "role.ams", AMS)
+    # Kishor's own work, handed to the Delivery Specialist.
+    _activity(g, "act.brd", "Compile Final BRD", personas="persona.kishor", role_id="role.ba")
+    g.upsert_node(_node("art.brd", NodeType.ARTIFACT, "Final BRD", personas="persona.kishor"))
+    g.add_edge(_edge(EdgeType.PRODUCES, "act.brd", "art.brd", persona="persona.kishor"))
+    g.add_edge(_edge(EdgeType.HANDS_OFF_TO, "act.brd", "role.ds", persona="persona.kishor"))
+    # Kishor describing OTHER people's roles — the provenance that used to confer ownership.
+    _activity(g, "act.timeline", "Create Pre-sales Timeline",
+              personas="persona.kishor", role_id="role.ds")
+    _activity(g, "act.pricing", "Add Pricing and Send Proposal",
+              personas="persona.kishor", role_id="role.ams")
+    g.add_edge(_edge(EdgeType.HANDS_OFF_TO, "act.timeline", "role.ams", persona="persona.kishor"))
+    # Rahul's own work, so role.ds has a contributor of its own as well.
+    _activity(g, "act.plan", "Create Project Plan", personas="persona.rahul", role_id="role.ds")
+    return g
+
+
+#: What the two of them ticked at onboarding. Nobody ticked Account Management Specialist.
+_LIVE_DECLARED = {"persona.kishor": (BA,), "persona.rahul": (DS,)}
+
+
+def test_describing_a_colleagues_work_does_not_make_you_hold_their_role():
+    """WC-28 as it was reported, off the live briefs (ADR #42).
+
+    Kishor's brief opened with *"It sounds like Business Analysis Specialist hands 'Compile Final
+    BRD' over to you — do you receive it, and what do you do with it next?"* — the handoff he had
+    just described **making**, put to him as its recipient, because his provenance on
+    `Create Pre-sales Timeline` made him an owner of the Delivery Specialist role.
+    """
+    report = CrossPersonaEngine(
+        _narrator_graph(), ONT, now=TS, declared_roles=_LIVE_DECLARED
+    ).assess()
+
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.brd"]
+    assert [(rt.persona_id, rt.thread.kind) for rt in routed] == [
+        ("persona.rahul", KIND_HANDOFF_CONFIRM)
+    ]
+
+
+def test_a_role_nobody_declared_has_not_been_interviewed_and_routes_to_the_discoverer():
+    """The half of WC-28 that a per-role "prefer declared owners" fix would have left behind.
+
+    Nobody holds Account Management Specialist, so `Create Pre-sales Timeline -> AMS` has no
+    receiver to confirm it — which is exactly what `route_discoverer` means. Falling back to
+    "whoever described AMS's work" instead sent *"Delivery Specialist hands 'Create Pre-sales
+    Timeline' over to you — do you receive it?"* to a Business Analyst and a Delivery Specialist,
+    neither of whom is an Account Manager.
+    """
+    report = CrossPersonaEngine(
+        _narrator_graph(), ONT, now=TS, declared_roles=_LIVE_DECLARED
+    ).assess()
+
+    ams = [h for h in report.handoffs if h.to_role == "role.ams"]
+    assert [h.state for h in ams] == ["route_discoverer"]
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.timeline"]
+    # Back to the one person who raised it, worded as "who would know?" rather than "do you get it?"
+    assert [(rt.persona_id, rt.thread.kind) for rt in routed] == [
+        ("persona.kishor", KIND_HANDOFF_TRACE)
+    ]
+
+
+def test_a_confirm_thread_only_ever_reaches_a_declared_holder_of_the_receiving_role():
+    """The general invariant, so a future widening of ownership fails here rather than in a brief.
+
+    A `handoff_confirm` says "you receive this" in the second person. Getting it wrong does not
+    merely waste a turn — it tells someone they hold a role they do not.
+    """
+    report = CrossPersonaEngine(
+        _narrator_graph(), ONT, now=TS, declared_roles=_LIVE_DECLARED
+    ).assess()
+
+    by_role = {"role.ba": {"persona.kishor"}, "role.ds": {"persona.rahul"}, "role.ams": set()}
+    for rt in report.routed:
+        if rt.thread.kind is not KIND_HANDOFF_CONFIRM:
+            continue
+        assert rt.persona_id in by_role[rt.thread.other_role_id], (
+            f"{rt.persona_id} was told they receive '{rt.thread.node_name}' as "
+            f"{rt.thread.other_role_name}, a role they never declared"
+        )
+
+
+def test_one_handoff_confirm_never_lands_in_two_peoples_briefs():
+    """WC-28 at the altitude the owner saw it: the PM's question, verbatim, on the BA's screen.
+
+    Both briefs opened with the identical thread id at priority 1. Asking two people the same
+    *topic* is fine and is how P16a-bis promotes a fact to `confirmed`; asking two people to
+    confirm they are the single recipient of one handoff is not — at most one of them is.
+    """
+    briefs = _planner(_narrator_graph(), _LIVE_DECLARED).plan_all(session_id="s")
+    confirms = {
+        b.persona_id: {t.id for t in b.open_threads if t.id.startswith("thread.handoff_confirm.")}
+        for b in briefs
+    }
+
+    assert confirms == {
+        "persona.rahul": {"thread.handoff_confirm.act.brd.role.ds"},
+        "persona.kishor": set(),
+    }
+
+
+def test_the_contribution_fallback_survives_only_where_nothing_is_declared():
+    """P9's inference is kept for a pre-P15a bus, and this test is the fence around it.
+
+    With no declarations anywhere the engine has no better signal than "who described this role's
+    work", so it uses it — and reproduces the WC-28 shape, both people asked about one handoff.
+    That is the *legacy* answer, correct only because nothing better exists; on any real bus
+    `lifecycle.declared_roles` lists every live participant, so this branch never runs.
+    """
+    report = CrossPersonaEngine(_narrator_graph(), ONT, now=TS).assess()
+
+    routed = [rt for rt in report.routed if rt.thread.node_id == "act.brd"]
+    assert {rt.persona_id for rt in routed} == {"persona.kishor", "persona.rahul"}

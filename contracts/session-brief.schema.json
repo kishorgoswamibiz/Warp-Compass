@@ -46,6 +46,12 @@
       "description": "Lower-priority thread ids held in reserve.",
       "items": { "type": "string" },
       "default": []
+    },
+    "known_facts": {
+      "type": "array",
+      "description": "What this person has ALREADY told us, as flat one-line statements (P17c / WC-26). The counterpart to open_threads: that list is what we still want, this is what we already have. Written deterministically by the brain from the persona's own subgraph — NEVER drafted by a model, because a hallucinated memory is worse than no memory. The runner renders it as a WHAT WE ALREADY KNOW block and is forbidden to ask for any of it cold.",
+      "items": { "type": "string" },
+      "default": []
     }
   }
 }

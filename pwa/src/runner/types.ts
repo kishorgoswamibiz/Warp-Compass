@@ -58,6 +58,15 @@ export interface SessionBrief {
   persona_summary?: string;
   open_threads: BriefThread[];
   reserve_threads?: string[];
+  /**
+   * What this person has already told us, as flat one-line statements (P17c / WC-26).
+   *
+   * The brief has always carried what we still WANT (`open_threads`) and never what we already
+   * HAVE, so the interviewer could not acknowledge a previous session — hence *"I had replied in my
+   * previous sessions"* and *"Did I not tell you…?"*. Written deterministically by the brain from
+   * the graph, never by a model: this is a memory, and a hallucinated memory is worse than none.
+   */
+  known_facts?: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +92,14 @@ export interface AnswerLogEntry {
   raw_answer: string;
   /** Optional pointer to recorded audio (voice arrives in P7). */
   audio_ptr?: string | null;
+  /**
+   * How the live model read this answer (P17c / WC-25). Optional so a device on old cached JS
+   * still writes a valid log. Its reason for existing is the two refusals: a `dont_know` or
+   * `not_mine` paired with a `thread_id` is what lets the brain stop asking. Before this field the
+   * model classified the refusal and the runner threw it away, so *"the project timeline is not my
+   * job"* — said three times in one session — never reached the graph and came back next round.
+   */
+  classification?: Classification;
   /** ISO-8601 timestamp. */
   ts: string;
 }
@@ -101,8 +118,18 @@ export interface AnswerLog {
 // Runner-internal: the live LLM turn contract (docs/02 §12 "Live runner")
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** How the live model read the person's most recent answer. */
-export type Classification = "clear" | "vague" | "tangent" | "dont_know";
+/**
+ * How the live model read the person's most recent answer.
+ *
+ * **`dont_know` and `not_mine` are deliberately separate (P17c / WC-25).** They look alike in a
+ * transcript and mean very different things to the brain: *"I don't know what triggers that"* closes
+ * one question, *"the project timeline is not my job"* closes every question about the project
+ * timeline. Collapsing them forces a choice between two wrong behaviours — a brief that re-asks the
+ * other three clustered threads about work the person just disowned, or one that goes silent on an
+ * activity they genuinely perform because they were hazy on a single detail. The model already has
+ * to draw this line to obey the denial rule in `SYSTEM_PROMPT`; this makes the answer durable.
+ */
+export type Classification = "clear" | "vague" | "tangent" | "dont_know" | "not_mine";
 
 /** What the next utterance is doing. */
 export type ActionKind =

@@ -191,7 +191,7 @@ def cmd_run_round(args) -> int:
     """
     from .bus import FolderBus
     from .cycle import RoundRunner
-    from .lifecycle import declared_roles, effective_retired
+    from .lifecycle import declared_roles, effective_retired, refusals
     from .ontology import load_ontology
     from .planner import Planner
 
@@ -213,6 +213,12 @@ def cmd_run_round(args) -> int:
             # reach the right person) AND role-scoped inheritance (a role's open questions reach
             # every holder, not just whoever spoke first).
             declared_roles=declared_roles(bus),
+            # P17c: what each person has told us to stop asking. Read here, before the round
+            # ingests, which is safe because the phone pushes its Answer Log BEFORE the round runs
+            # — a refusal made in the session being ingested now already takes effect in the brief
+            # this same round writes back.
+            refusals=refusals(bus),
+            known_facts_max=s.planner_known_facts_max,
             now=_now(),
         )
         runner = RoundRunner(bus, ingestor, planner, now=_now())
@@ -669,7 +675,7 @@ def _node_counts(settings) -> dict:
 
 def cmd_plan(args) -> int:
     from .bus import FolderBus
-    from .lifecycle import declared_roles, effective_retired
+    from .lifecycle import declared_roles, effective_retired, refusals
     from .ontology import load_ontology
     from .planner import Planner
 
@@ -685,6 +691,8 @@ def cmd_plan(args) -> int:
             role_max=s.planner_role_max,
             retired_personas=effective_retired(bus),
             declared_roles=declared_roles(bus),
+            refusals=refusals(bus),
+            known_facts_max=s.planner_known_facts_max,
             now=_now(),
         )
         if args.persona:

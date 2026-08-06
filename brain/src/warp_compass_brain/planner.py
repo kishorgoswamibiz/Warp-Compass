@@ -49,7 +49,7 @@ himself, and would delete peer-conflict detection along with it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from .completeness import CompletenessEngine, GapKind, load_snapshot
@@ -61,6 +61,7 @@ from .crosspersona import (
     CrossPersonaEngine,
 )
 from .graphstore.base import GraphStore
+from .lifecycle import Refusal
 from .models import EdgeType, NodeType
 from .ontology import Ontology
 from .roles import REGISTRY_SAID_BY, resolve_declared_roles
@@ -146,6 +147,77 @@ def _cluster(
     return chosen[:limit]
 
 
+#: Prefixes the Planner puts on a thread id to record HOW the thread reached this person
+#: (``_role_threads``, ``_orphan_threads``). They are routing provenance, not part of the question,
+#: so refusal matching strips them (P17c).
+_ROUTING_PREFIXES = ("role.", "orphan.")
+
+
+def _base_thread_id(thread_id: str) -> str:
+    """A thread id with its routing prefix removed — the identity of the QUESTION."""
+    for p in _ROUTING_PREFIXES:
+        if thread_id.startswith(p):
+            return thread_id[len(p) :]
+    return thread_id
+
+
+def _node_id_in(thread_id: str, node_ids) -> str | None:
+    """The graph node a thread id is about, read out of the id itself.
+
+    The fallback path for a refusal whose thread no longer exists. Thread ids are built as
+    ``thread.{kind}.{node_id}[.{field}]`` (``threads._unique_id``), but rather than re-encode that
+    format here — a second copy of a rule that would rot silently — this matches against the ids
+    the graph actually holds, and takes the **earliest** match. Earliest, not longest: a
+    ``handoff_confirm`` id carries the receiving role as well as the activity
+    (``thread.handoff_confirm.act.compile-final-brd.role.delivery-specialist``), and the role is
+    both later and, in that example, the longer string. The subject of the question comes first.
+    """
+    padded = f".{thread_id}."
+    best: tuple[int, int, str] | None = None
+    for nid in node_ids:
+        at = padded.find(f".{nid}.")
+        if at >= 0 and (best is None or (at, -len(nid)) < (best[0], best[1])):
+            best = (at, -len(nid), nid)
+    return best[2] if best else None
+
+
+#: How an Activity's completeness fields read as prose. Each is rendered only when the graph
+#: actually holds it, so a sparse activity yields a short line rather than a line full of "unknown".
+def _activity_fact(card, snap) -> str:
+    """One activity as a single line of established fact, e.g.
+    ``"Compile Final BRD" (Pre-sales Phase) — produces Final BRD; hands to Delivery Specialist``.
+    """
+    def names(edge: EdgeType) -> list[str]:
+        return sorted(
+            snap.nodes[n].canonical_name for n in snap.out(card.id, edge) if n in snap.nodes
+        )
+
+    head = f'You do "{card.canonical_name}"'
+    stage = names(EdgeType.PART_OF)
+    if stage:
+        head += f" (in {', '.join(stage)})"
+    clauses: list[str] = []
+    trigger = sorted(
+        snap.nodes[n].canonical_name
+        for n in snap.inc(card.id, EdgeType.TRIGGERS)
+        if n in snap.nodes
+    )
+    for label, vals in (
+        ("started by", trigger),
+        ("needs", names(EdgeType.CONSUMES)),
+        ("done in", names(EdgeType.USES)),
+        ("produces", names(EdgeType.PRODUCES)),
+        ("hands to", names(EdgeType.HANDS_OFF_TO)),
+        ("governed by", names(EdgeType.GOVERNED_BY)),
+    ):
+        if vals:
+            clauses.append(f"{label} {', '.join(vals)}")
+    cadence = str((card.key_attributes or {}).get("cadence") or "").strip()
+    if cadence:
+        clauses.append(f"happens {cadence}")
+    return f"{head} — {'; '.join(clauses)}" if clauses else head
+
+
 @dataclass
 class BriefThread:
     """One ranked thread in a Session Brief (mirrors the schema's open_threads item)."""
@@ -178,6 +250,7 @@ class SessionBrief:
     open_threads: list[BriefThread]
     persona_summary: str = ""
     reserve_threads: list[str] = field(default_factory=list)
+    known_facts: list[str] = field(default_factory=list)
     schema_version: str = "1.0.0"
 
     def to_dict(self) -> dict:
@@ -189,6 +262,7 @@ class SessionBrief:
             "persona_summary": self.persona_summary,
             "open_threads": [t.to_dict() for t in self.open_threads],
             "reserve_threads": list(self.reserve_threads),
+            "known_facts": list(self.known_facts),
         }
 
 
@@ -203,8 +277,10 @@ class Planner:
         max_threads: int = 6,
         orphan_max: int = 2,
         role_max: int = 4,
+        known_facts_max: int = 12,
         retired_personas: set[str] | frozenset[str] | None = None,
         declared_roles: Mapping[str, Sequence[str]] | None = None,
+        refusals: Mapping[str, Iterable[Refusal]] | None = None,
         now: str | None = None,
     ) -> None:
         self._g = graph
@@ -212,7 +288,12 @@ class Planner:
         self._max = max_threads
         self._orphan_max = orphan_max
         self._role_max = role_max
+        self._known_facts_max = known_facts_max
         self._retired = frozenset(retired_personas or ())
+        #: ``persona_id -> what they have refused`` (P17c / WC-25), from the Answer Logs via
+        #: ``lifecycle.refusals``. Absent in tests and on a pre-P17c bus, in which case nothing is
+        #: suppressed and the Planner behaves exactly as it did before.
+        self._refusals = {k: frozenset(v) for k, v in (refusals or {}).items()}
         #: ``persona_id -> declared role titles``, from the bus (P16a-bis / ADR #36). Every LIVE
         #: participant appears, even one who declared nothing — the keys double as the roster of
         #: people who exist but may not have spoken yet (see `live_personas`).
@@ -278,6 +359,25 @@ class Planner:
             [*cross_threads, *threads_from_gaps(persona_gaps, now=self._now)],
             key=lambda t: (-t.priority, t.id),
         )
+        # Open questions on THIS PERSON'S ROLES that they personally haven't touched (P16a-bis),
+        # and questions left behind by retired teammates (P13). Both are built here, before the
+        # refusal filter, so a "not mine" recorded against any one of the three sources suppresses
+        # the matching node in all of them — the person disowned the work, not a routing category.
+        role_ids = self._persona_role_ids(persona_id, snap)
+        role_threads = self._role_threads(snap, report, subgraph_ids, role_ids)
+        orphan_threads = self._orphan_threads(snap, report, subgraph_ids)
+
+        # P17c / WC-25 — drop everything this person has already refused.
+        refused_ids, refused_nodes = self._refused(
+            persona_id, snap, (threads, role_threads, orphan_threads)
+        )
+
+        def keep(thread_id: str, node_id: str | None) -> bool:
+            return _base_thread_id(thread_id) not in refused_ids and node_id not in refused_nodes
+
+        threads = [t for t in threads if keep(t.id, t.node_id)]
+        role_threads = [t for t in role_threads if keep(f"role.{t.id}", t.node_id)]
+        orphan_threads = [t for t in orphan_threads if keep(f"orphan.{t.id}", t.node_id)]
 
         own = _cluster(threads, self._max)
         brief_threads: list[BriefThread] = []
@@ -293,11 +393,9 @@ class Planner:
                     followups=followups,
                 )
             )
-        # Open questions on THIS PERSON'S ROLES that they personally haven't touched (P16a-bis).
-        # Appended after their own work for the same structural reason as orphans below: a question
-        # about a colleague's account of your role must never outrank your own.
-        role_ids = self._persona_role_ids(persona_id, snap)
-        role_threads = self._role_threads(snap, report, subgraph_ids, role_ids)
+        # Role-inherited threads, appended after their own work for the same structural reason as
+        # orphans below: a question about a colleague's account of your role never outranks
+        # your own.
         for t in _cluster(role_threads, self._role_max):
             opener, followups = _role_opener_and_followups(t)
             brief_threads.append(
@@ -312,7 +410,7 @@ class Planner:
             )
         # Questions left behind by retired teammates, appended AFTER this person's own work so the
         # rank floor is structural: they can never outrank a thread about the person's own role.
-        for t in _cluster(self._orphan_threads(snap, report, subgraph_ids), self._orphan_max):
+        for t in _cluster(orphan_threads, self._orphan_max):
             opener, followups = _orphan_opener_and_followups(t)
             brief_threads.append(
                 BriefThread(
@@ -337,6 +435,9 @@ class Planner:
             open_threads=brief_threads,
             persona_summary=summary,
             reserve_threads=reserve,
+            known_facts=self._known_facts(
+                subgraph_ids - refused_nodes, snap, brief_threads
+            ),
         )
 
     def plan_all(self, *, session_id: str) -> list[SessionBrief]:
@@ -346,6 +447,101 @@ class Planner:
         a full completeness pass, and nobody would ever read it.
         """
         return [self.plan(pid, session_id=session_id) for pid in self.live_personas()]
+
+    # --- refusals (P17c / WC-25) ---
+
+    def _refused(self, persona_id: str, snap, candidates) -> tuple[set[str], set[str]]:
+        """``(refused question ids, refused node ids)`` for one persona.
+
+        A person told us to stop asking. Until P17c that instruction lived only in the transcript
+        prose, so the extractor dropped it (a denial asserts nothing to extract) and the gap it was
+        about was still open next round — which is how *"the project timeline is not my job"* got
+        asked three times in one session, and how a Solution Architect came to say *"I told you I do
+        not act as a delivery specialist. Why you're not trying to understand?"*
+
+        Two scopes, because the two refusals mean different things (``lifecycle.REFUSAL_SCOPES``):
+
+        * ``dont_know`` closes **that question**. They perform the work, they just can't answer this
+          detail — the rest of the activity is still fair game, and someone else may fill this in.
+        * ``not_mine`` closes **the whole piece of work**. Anything less re-asks the other two or
+          three threads P17a clustered onto that node, which is the repetition being complained
+          about wearing a different hat.
+
+        The refused NODES are returned separately because they suppress more than threads: they also
+        come out of ``known_facts``. Somebody who has just disowned an activity must not then be
+        described to the interviewer as doing it — that would reintroduce WC-25 inside the block
+        built to fix WC-26, and in the worse position, since ``known_facts`` is stated as
+        established fact rather than asked as a question.
+
+        The ``role.``/``orphan.`` prefixes are stripped before matching. They record *why the thread
+        reached you*, not *what was asked* — a person who refused a question does not un-refuse it
+        because the same gap now arrives via their declared role.
+        """
+        refused = self._refusals.get(persona_id)
+        if not refused:
+            return set(), set()
+
+        thread_ids = {_base_thread_id(r.thread_id) for r in refused}
+        node_scoped = {_base_thread_id(r.thread_id) for r in refused if r.scope == "node"}
+        # Resolve refused thread ids to the node they were about. Prefer the live candidates: their
+        # `node_id` comes from the graph and needs no guessing. Fall back to reading the node id out
+        # of the thread id, which is what keeps a `not_mine` working after the exact thread has gone
+        # (a colleague answered that field, so the gap — and its thread — no longer exist).
+        nodes: set[str] = set()
+        seen: set[str] = set()
+        for group in candidates:
+            for t in group:
+                base = _base_thread_id(t.id)
+                if base in node_scoped and t.node_id:
+                    nodes.add(t.node_id)
+                    seen.add(base)
+        for base in node_scoped - seen:
+            nid = _node_id_in(base, snap.nodes)
+            if nid:
+                nodes.add(nid)
+        return thread_ids, nodes
+
+    # --- known facts (P17c / WC-26) ---
+
+    def _known_facts(self, subgraph_ids: set[str], snap, brief_threads) -> list[str]:
+        """Flat one-line statements of what this person has ALREADY told us.
+
+        The brief has always carried what we still want and never what we already have, so the
+        interviewer had no way to acknowledge a previous session. Testers noticed immediately —
+        *"I had replied in my previous sessions"*, *"Did I not tell you that I document the user
+        stories?"* — and from the model's side they were right to: nothing in its context said so.
+
+        **Deterministic, never model-written.** Every clause below is read straight off an edge or
+        an attribute that is in the graph. This block is injected as memory and the interviewer will
+        treat it as established fact, so a hallucinated line here does not merely waste a turn — it
+        asserts something the person never said and invites them to correct a machine that should
+        not have been guessing.
+
+        **Ordered by this brief's own threads first.** The activities the session is about to walk
+        are the ones where knowing-what-we-know changes the next question — it turns *"what does
+        Compile Final BRD produce?"* into *"you said it produces the Final BRD — who picks it up?"*
+        Everything else follows, capped, so a fifteen-activity person still gets a readable block
+        rather than their whole subgraph pasted back at them.
+        """
+        if self._known_facts_max <= 0:
+            return []
+        acts = [
+            snap.nodes[nid]
+            for nid in subgraph_ids
+            if snap.nodes[nid].type is NodeType.ACTIVITY
+        ]
+        if not acts:
+            return []
+        in_brief = [t.id for t in brief_threads]
+        rank = {
+            card.id: next(
+                (i for i, tid in enumerate(in_brief) if f".{card.id}." in f".{tid}."),
+                len(in_brief),
+            )
+            for card in acts
+        }
+        acts.sort(key=lambda c: (rank[c.id], c.canonical_name))
+        return [_activity_fact(c, snap) for c in acts[: self._known_facts_max]]
 
     # --- role-inherited threads (P16a-bis) ---
 
@@ -357,9 +553,11 @@ class Planner:
         ``alignment._persona_role``: an exec who merely *comments on* a Business Analyst's activity
         picks up provenance on it, and would then start inheriting the BA's entire question set. The
         onboarding multi-select is unambiguous and the person chose it themselves; contribution is a
-        guess. Ownership in the other direction (``crosspersona._role_owner_personas``) unions the
-        two because *being asked* is cheap and *never being asked* is the bug; here the cost is
-        reversed, so this stays strict.
+        guess. Ownership in the other direction (``crosspersona._role_owner_personas``) used to
+        union the two on the argument that *being asked* is cheap and *never being asked* is the
+        bug. WC-28 (ADR #42) priced that: being asked is cheap only when the question fits, and a
+        handoff-confirm addressed to the wrong role is the most expensive question in the brief —
+        it tells someone they hold a role they don't. Both sides are now declared-only.
         """
         titles = self._declared.get(persona_id)
         if not titles:

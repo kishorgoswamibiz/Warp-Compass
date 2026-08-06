@@ -18,9 +18,9 @@ provenance:
   session_id: seed.roles
   confidence: 1.0
   status: unverified
-  ts: '2026-08-06T04:50:54.121984+00:00'
+  ts: '2026-08-06T08:41:00.031182+00:00'
 edges: []
-timestamp: '2026-08-06T04:50:54.121984+00:00'
+timestamp: '2026-08-06T08:41:00.031182+00:00'
 ---
 
 # Finance

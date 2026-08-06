@@ -1,12 +1,13 @@
 ---
 type: Artifact
-id: art.effort-estimate
-title: Effort Estimate
+id: art.client-deadline
+title: Client Deadline
 keywords:
-- estimate
-- estimated effort
-- 3000 hours
-description: The total estimated effort for a project, expressed in hours.
+- client timeline
+- deadline
+- we need it done in three months
+- 10 weeks
+description: The timeline or deadline specified by the client for project completion.
 status: unverified
 category_codes:
 - '07'
@@ -17,16 +18,16 @@ provenance:
   confidence: 0.7
   status: unverified
   ts: '2026-08-06T08:45:50.553Z'
-  account: The total estimated effort for a project, expressed in hours.
+  account: The timeline or deadline specified by the client for project completion.
 edges: []
 timestamp: '2026-08-06T08:45:50.553Z'
 ---
 
-# Effort Estimate
+# Client Deadline
 
-> **Artifact** `art.effort-estimate` · status **unverified** · keywords: estimate, estimated effort, 3000 hours
+> **Artifact** `art.client-deadline` · status **unverified** · keywords: client timeline, deadline, we need it done in three months, 10 weeks
 
-The total estimated effort for a project, expressed in hours.
+The timeline or deadline specified by the client for project completion.
 
 ## Facts
 - 2026-08-06 — rahul-delivery-delivery-specialist-4b33 (session s_20260806_1411, confidence 0.7, unverified)

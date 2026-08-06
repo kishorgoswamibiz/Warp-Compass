@@ -3,67 +3,37 @@ type: Activity
 id: act.project-management
 title: Project Management
 keywords:
-- day-to-day project management
-- manage timelines
-- Project Delivery Management
-- manage efforts and timelines
-- manage project
-- project updates
-- stakeholder management
-description: Delivery specialist oversees project timelines and handles day-to-day project management
-  activities during the project phase.
+- manage stakeholders
+- keep project timelines
+- monitor progress
+- ensure team resources
+- ensure working per expectations
+description: Oversee project execution, including stakeholder management, timeline tracking, progress
+  monitoring, and ensuring the team has necessary resources and meets expectations.
 status: unverified
 category_codes:
 - '02'
 key_attributes: {}
 provenance:
-- said_by: rahul-delivery-delivery-specialist-2326
-  session_id: s_20260805_2259
+- said_by: rahul-delivery-delivery-specialist-4b33
+  session_id: s_20260806_1411
   confidence: 0.7
   status: unverified
-  ts: '2026-08-05T17:32:14.753Z'
-  account: Delivery specialist oversees project timelines and handles day-to-day project management activities
-    during the project phase.
-- said_by: rahul-delivery-delivery-specialist-2326
-  session_id: s_20260805_2259
-  confidence: 0.7
-  status: unverified
-  ts: '2026-08-05T17:34:12.819Z'
-  account: Ongoing management of project efforts, timelines, and stakeholders, including coordination
-    with account management and status reporting to the CEO. Ensures transition to support after go-live.
-edges:
-- type: HANDS_OFF_TO
-  to: role.account-management-specialist
-  provenance:
-  - said_by: rahul-delivery-delivery-specialist-2326
-    session_id: s_20260805_2259
-    confidence: 0.7
-    status: unverified
-    ts: '2026-08-05T17:34:12.819Z'
-- type: PART_OF
-  to: stg.project-execution
-  provenance:
-  - said_by: rahul-delivery-delivery-specialist-2326
-    session_id: s_20260805_2259
-    confidence: 0.7
-    status: unverified
-    ts: '2026-08-05T17:34:12.819Z'
-timestamp: '2026-08-05T17:34:12.819Z'
+  ts: '2026-08-06T08:42:05.208Z'
+  account: Oversee project execution, including stakeholder management, timeline tracking, progress monitoring,
+    and ensuring the team has necessary resources and meets expectations.
+edges: []
+timestamp: '2026-08-06T08:42:05.208Z'
 ---
 
 # Project Management
 
-> **Activity** `act.project-management` · status **unverified** · keywords: day-to-day project management, manage timelines, Project Delivery Management, manage efforts and timelines, manage project, project updates, stakeholder management
+> **Activity** `act.project-management` · status **unverified** · keywords: manage stakeholders, keep project timelines, monitor progress, ensure team resources, ensure working per expectations
 
-Delivery specialist oversees project timelines and handles day-to-day project management activities during the project phase.
+Oversee project execution, including stakeholder management, timeline tracking, progress monitoring, and ensuring the team has necessary resources and meets expectations.
 
 ## Facts
-- 2026-08-05 — rahul-delivery-delivery-specialist-2326 (session s_20260805_2259, confidence 0.7, unverified)
-- 2026-08-05 — rahul-delivery-delivery-specialist-2326 (session s_20260805_2259, confidence 0.7, unverified)
-
-## Links
-- HANDS_OFF_TO → [[role.account-management-specialist]] — Account Management Specialist
-- PART_OF → [[stg.project-execution]] — Project Execution
+- 2026-08-06 — rahul-delivery-delivery-specialist-4b33 (session s_20260806_1411, confidence 0.7, unverified)
 
 ## Backlinks
 - [[role.delivery-specialist]] (Delivery Specialist) — PERFORMS

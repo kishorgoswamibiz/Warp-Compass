@@ -88,7 +88,7 @@ What's in it, so you know which paragraph to edit:
 |---|---|---|
 | Persona | [#L78](pwa/src/runner/prompts.ts#L78) | "warm, sharp interviewer… like a curious colleague, never a form" |
 | **END GOAL** | [#L80](pwa/src/runner/prompts.ts#L80) | the SOP mapped against the **lifecycle of work**; the unit of structure is the **STAGE**; cadence is required; "DO NOT organise anything around a calendar day"; explicitly *not* pain-point hunting |
-| **METHOD** | [#L82](pwa/src/runner/prompts.ts#L82) | **two passes** — Pass A gets the stage map, Pass B walks one stage at a time; capture another role's work and move on; **record expectations as stated, never reconcile them**; never open with "what's most frustrating" |
+| **METHOD** | [#L82](pwa/src/runner/prompts.ts#L82) | **two passes** — Pass A gets the stage map, Pass B walks one stage at a time; capture another role's work and move on; **a denial is final (P17a)**; **record expectations as stated, never reconcile them**; never open with "what's most frustrating" |
 | Brief contract | [#L90](pwa/src/runner/prompts.ts#L90) | brief is guidance, not a questionnaire; prefer threads that complete the chain |
 | Classification set | [#L93](pwa/src/runner/prompts.ts#L93) | `clear` / `vague` / `tangent` / `dont_know` |
 | Action set | [#L98](pwa/src/runner/prompts.ts#L98) | `opener` / `redirect` / `probe` / `reconcile` / `acknowledge` / `close` |
@@ -100,6 +100,15 @@ What's in it, so you know which paragraph to edit:
 > and "record it as stated. Do not challenge it or reconcile it" is what preserves the
 > exec-vs-doer divergence that P15c reports as a finding (ADR #32). Softening either one quietly
 > deletes the product.
+>
+> **Two more are load-bearing for whether the person stays in the session (P17a).** *"accept it the
+> first time… never raise it, or the role it implies, again this session"* and *"the ONLY authority
+> on which roles they hold"* exist because a Business Analyst was asked about a role he had already
+> denied twice — *"I told you I do not act as a delivery specialist. Why you're not trying to
+> understand?"* — and both testers ended their sessions early. The brain-side fixes (ADRs #37/#38)
+> stop the bad thread being *written*; these two rules are the second line of defence for when a
+> brief is wrong anyway, which eventually it always will be. Pinned by
+> `runner.test.ts` → *"a denial is final, and roles are never assumed (P17a)"*.
 
 **Tuning notes.** The "under 30 words" and "one question per turn" rules are what keep it feeling
 spoken rather than written — loosen them and answers get long and the person disengages. The
@@ -134,11 +143,18 @@ runner may reword. **This is the text driving sessions 2..n**, so it matters as 
 
 | What | Where |
 |---|---|
-| `_FIELD_OPENERS` — one opener per missing field | [`planner.py#L337`](brain/src/warp_compass_brain/planner.py#L337) |
-| `_FIELD_FOLLOWUPS` — conditional second question per field | [`planner.py#L361`](brain/src/warp_compass_brain/planner.py#L361) |
-| `_opener_and_followups()` — picks copy per gap kind: one-sided handoff, broken chain, unresolved conflict | [`planner.py#L388`](brain/src/warp_compass_brain/planner.py#L388) |
-| P9 cross-persona routed threads: `handoff_confirm`, `handoff_trace`, `cross_conflict` | [`planner.py#L409`](brain/src/warp_compass_brain/planner.py#L409) onward |
-| Persona summary sentence ("N activities; N systems; N problems raised") | [`planner.py#L260`](brain/src/warp_compass_brain/planner.py#L260) |
+| `_FIELD_OPENERS` — one opener per missing field | [`planner.py#L605`](brain/src/warp_compass_brain/planner.py#L605) |
+| `_FIELD_FOLLOWUPS` — conditional second question per field | [`planner.py#L629`](brain/src/warp_compass_brain/planner.py#L629) |
+| `_opener_and_followups()` — picks copy per gap kind: one-sided handoff, broken chain, unresolved conflict | [`planner.py#L656`](brain/src/warp_compass_brain/planner.py#L656) |
+| P9 cross-persona routed threads: `handoff_confirm`, `handoff_trace`, `cross_conflict` | [`planner.py#L678`](brain/src/warp_compass_brain/planner.py#L678) onward |
+| Persona summary sentence — **declared roles only since P17a** (ADR #37) | [`planner.py#L449`](brain/src/warp_compass_brain/planner.py#L449) |
+
+> **⚠ Which threads reach the brief at all is now a copy-shaping decision too (P17a).**
+> [`_cluster()`](brain/src/warp_compass_brain/planner.py#L105) groups the ranked threads by node, so
+> a brief walks 3–4 activities at 2–3 questions each instead of asking one field across twelve. Before
+> it, 11 of 12 threads in a real brief were *"who picks it up next?"*. If a session ever feels like a
+> form again, check the **shape** of `cli plan` output before rewriting any wording here — the openers
+> below were never the problem. `_CLUSTER_MAX` (3) is the knob.
 
 The fields with openers, grouped by what they're mapping:
 
@@ -164,12 +180,12 @@ ownership ("what do *you* need in hand") which would be wrong for someone else's
 
 | What | Where |
 |---|---|
-| `_ORPHAN_WHY` | [`planner.py#L293`](brain/src/warp_compass_brain/planner.py#L293) |
-| `_ORPHAN_DONT_KNOW` — "who would be the right person to ask?" | [`planner.py#L298`](brain/src/warp_compass_brain/planner.py#L298) |
-| `_ORPHAN_FIELD_ASK` — per-field phrase fragments | [`planner.py#L303`](brain/src/warp_compass_brain/planner.py#L303) |
-| `_orphan_opener_and_followups()` | [`planner.py#L314`](brain/src/warp_compass_brain/planner.py#L314) |
+| `_ORPHAN_WHY` | [`planner.py#L561`](brain/src/warp_compass_brain/planner.py#L561) |
+| `_ORPHAN_DONT_KNOW` — "who would be the right person to ask?" | [`planner.py#L566`](brain/src/warp_compass_brain/planner.py#L566) |
+| `_ORPHAN_FIELD_ASK` — per-field phrase fragments | [`planner.py#L571`](brain/src/warp_compass_brain/planner.py#L571) |
+| `_orphan_opener_and_followups()` | [`planner.py#L582`](brain/src/warp_compass_brain/planner.py#L582) |
 
-### 5c. Dual-hat self-handoff copy (P15a)
+### 5c. Dual-hat self-handoff copy (P15a, narrowed by P17a)
 
 A multi-role person hands work from one of their own hats to another. The standard handoff copy says
 a stranger passed it over, which reads as a bug and invites a "that's me" non-answer — so the thread
@@ -177,9 +193,17 @@ is reworded rather than suppressed (the switch is where dual-hat work most often
 
 | What | Where |
 |---|---|
-| `KIND_HANDOFF_SELF` — the thread kind | [`crosspersona.py#L43`](brain/src/warp_compass_brain/crosspersona.py#L43) |
-| Where the twin is minted (giver's owners ∩ receiver's owners) | [`crosspersona.py#L230`](brain/src/warp_compass_brain/crosspersona.py#L230) |
-| The opener — *"when you switch from your X hat to your Y hat…"* | [`planner.py#L385`](brain/src/warp_compass_brain/planner.py#L385) |
+| `KIND_HANDOFF_SELF` — the thread kind | [`crosspersona.py#L45`](brain/src/warp_compass_brain/crosspersona.py#L45) |
+| Where the twin is minted — **declarers of the giving role ∩ declarers of the receiving role** (P17a) | [`crosspersona.py#L245`](brain/src/warp_compass_brain/crosspersona.py#L245) |
+| The opener — *"when you switch from your X hat to your Y hat…"* | [`planner.py#L690`](brain/src/warp_compass_brain/planner.py#L690) |
+
+> **⚠ This copy is only ever correct when BOTH roles were declared at onboarding (ADR #38).** It used
+> to fire on `_role_owner_personas`, which counts *contributing a role's activities* as owning it — so
+> merely describing what QA does was enough to be told you wear the QA Head hat. A Solution Architect
+> heard it in his opening question and answered *"I do not do quality assurance and all that"*; a
+> Business Analyst heard the Delivery Specialist version a third time after two denials. If you ever
+> widen this branch again, widen `_declared_owners`, never `_role_owner_personas` — the latter is
+> deliberately generous **for routing** and must not leak into anything the person hears.
 
 > Guarded by `test_self_handoff_copy_never_says_another_team` — if you rewrite this copy, keep it
 > free of "another team"/"another role", which is the entire point of the branch.
@@ -200,6 +224,7 @@ knowledge graph — not what the person hears.
 Rules worth knowing before you touch it:
 
 - **"Be an ACTIVE EDITOR, never a transcriber"** ([#L35](brain/src/warp_compass_brain/extractor.py#L35)) — distil, don't copy conversational text.
+- **"ONE ANSWER USUALLY DESCRIBES ONE ACTIVITY"** ([#L36](brain/src/warp_compass_brain/extractor.py#L36), P17b) — the anti-splitting rule, with an explicit split test: **different lifecycle stage, different role, or separated in time**. It exists because *"first I check the code quality, then I check the changesets, then I review everything and give the go-ahead"* minted **three** activities plus an invented `role.deployment-approver` from one sentence, and each fragment then carried its own full set of open questions into the next brief. The Role half of the rule matters as much as the Activity half.
 - **`canonical_name` + `aliases` are the node's identifier** ([#L37](brain/src/warp_compass_brain/extractor.py#L37)) — these feed dedup/resolve, so loosening them causes duplicate nodes.
 - **`description` = 1–3 factual sentences, what + why** ([#L40](brain/src/warp_compass_brain/extractor.py#L40)).
 - **ABSTRACT PEOPLE INTO ROLES** ([#L43](brain/src/warp_compass_brain/extractor.py#L43)) — never emit "John"; emit "Discount Approver". People change, roles persist.

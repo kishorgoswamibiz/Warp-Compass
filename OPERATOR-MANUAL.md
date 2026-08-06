@@ -367,6 +367,7 @@ All from `brain/`, prefixed with `uv run [--extra vectors] python -m warp_compas
 | `seed-roles [--dry-run] [--roles PATH]` | Seed `contracts/roles.json` into the graph. **Run before the first round**, and again after editing the registry (P15a). |
 | `plan [--persona ID] [--session ID]` | Emit per-persona Session Brief(s) from the graph. |
 | `ingest-log <path>` | Ingest a single Answer Log file by path (manual one-off). |
+| `rebuild-graph --yes [--dry-run] [--bus PATH]` | **Re-derive the whole graph from every Answer Log** (P17b). Deletes the graph, vector index and review queues, re-seeds the roles, then replays every answer — live **and archived** — in time order. **Your bus is not touched:** profiles, logs, briefs and archives all survive. Use it after improving the extractor or resolver, which is the supported way to fix a messy graph (never hand-edit the Markdown). Costs a paid DeepSeek call per answer, so it takes a few minutes; `--dry-run` lists what would be replayed. |
 | `check-models` | List which DeepSeek models your key can access. |
 | `list-participants` | Who's in the engagement — live, then retired (§1b). |
 | `retire-participant --id ID [--dry-run] [--hard-delete]` | Remove one person; the graph is untouched (§1c). |

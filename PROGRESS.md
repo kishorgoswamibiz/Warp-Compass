@@ -10,8 +10,20 @@
 
 ## Status snapshot
 
-- **Phase:** **ALL BUILD PHASES DONE (P0–P15) + P16a + P16a-bis.** **P16b–d remain PLAN ONLY** —
-  decide after one multi-person round (`docs/plan/phase-16-hat-fidelity.md`).
+- **Phase:** **ALL BUILD PHASES DONE (P0–P15) + P16a + P16a-bis + P17a.** **P16b–d and P17b/P17c
+  remain PLAN ONLY.**
+  **⚠ READ FIRST IF YOU ARE ABOUT TO RUN A LIVE SESSION (06 Aug 2026).** Two testers ended their
+  second sessions early; the transcripts are in `sample/`. Every complaint traced to the Session
+  Brief, not to the model — the brief was telling the interviewer that a Solution Architect who
+  declared one role held five (including Quality Assurance Head), that a Business Analyst was a
+  `Customer`, and it asked *"who picks it up next?"* in 11 of 12 threads. **P17a fixes all of that**
+  (ADRs #37/#38/#39): declared roles only, dual-hat copy needs a declaration on both sides, and a
+  brief is now clustered by topic so it walks 3–4 activities at 2–3 questions each. Verified by
+  regenerating both real briefs with `cli plan`.
+  **Still open before the next round:** the graph has **52 activity nodes from three people** with one
+  real activity forked four ways (**WC-24**, = WC-13 confirmed) — so some redundancy will remain until
+  **P17b** rebuilds the graph; and a *"that's not my job"* still does not survive the session
+  (**WC-25**, → P17c). See `docs/plan/phase-17-interview-fidelity.md`.
   **⚠ The engagement is now ROLE-SCOPED, not person-scoped (05 Aug 2026).** Two routing bugs are
   closed, both of which only bit with more than one person on the bus: a role somebody **declared**
   at onboarding is now **owned** (so a colleague's handoff reaches them instead of looping on the
@@ -173,6 +185,10 @@ One row per build-order phase (full briefs in `docs/plan/`). Sub-tasks live in e
 | P16a-bis | 16 | **Role-scoped gap inheritance** — a role's open questions reach every holder, and a new joiner gets a real brief | DONE | agent:opus-p16a | `planner.py` `_persona_role_ids` + `_role_threads` + role-inherited opener copy + `live_personas()` = contributors **∪** bus participants − retired + role-aware `persona_summary` · `config.planner_role_max` (4) · ADR #36 · plan doc §2 Finding 5 **corrected** (it had ruled this out of scope) | 05 Aug 2026 |
 | P16b–d | 16 | Hat *attribution* (`SPEAKER` block), per-hat altitude, SOP presentation | TODO (**plan only — decide after one multi-person round**) | — | **Plan:** `docs/plan/phase-16-hat-fidelity.md` §4. Open for the owner: what altitude a dual-hat person carries; whether to spend interview turns on certainty. P16b needs the Apps Script redeploy (it wants the unjoined `role_titles` array — see `ISSUES.md` WC-01). | 05 Aug 2026 |
 
+| P17a | 17 | **Interview fidelity: the brief must be TRUE and VARIED** — declared roles only, dual-hat needs a declaration, threads clustered by topic | DONE | agent:opus-p17a | `planner.py` `_persona_summary` declared-only + `_role_threads` stamps the inheriting role + **new `_cluster()`/`_CLUSTER_MAX`** + reserve by difference · `crosspersona.py` dual-hat via `_declared_owners` (routing untouched) · `prompts.ts` denial-is-final rule + identity-is-the-only-role-authority rule + grouped `briefDigest` · ADRs #37/#38/#39 · WC-20…WC-23 resolved (WC-R15…WC-R18) · **244 brain + 75 pwa tests** · verified on the live graph with `cli plan` | 06 Aug 2026 |
+| P17b | 17 | **Dedup + graph rebuild** — one activity should be one node (WC-24 / WC-13 confirmed) | DONE | agent:opus-p17a | `resolve.py` `node_context()` + enriched `_ADJ_SYSTEM` (**stage + performing role**, ADR #40) · `ingest.py` `_candidate_context()` · `extractor.py` anti-splitting rule (+ its scope guard, WC-27) · `config.similarity_ceiling` 0.86 → **0.90, RAISED** reversing the plan (ADR #41) · `lifecycle.all_answer_entries` + **new `cli rebuild-graph`** · **new `scripts/similarity_probe.py`** · **254 brain + 75 pwa tests** · rebuild run live: Activity 62→49, Role 14→11 | 06 Aug 2026 |
+| P17c | 17 | **Memory + denials** — record a "not mine", and tell the interviewer what it already knows (WC-25 / WC-26) | TODO | — | **Plan:** `docs/plan/phase-17-interview-fidelity.md` §6. ⚠ **Two contract changes** (`answer-log` gains optional `classification`, `session-brief` gains `known_facts`), so brain + PWA ship together and phones need a full reopen. | 06 Aug 2026 |
+
 **Dependency spine:** P1→P2→P3→P4→P5→P6→P7; P8 needs P4+P5; P9 needs P2+P3+P4; P10 needs P2 (richer after P9); **P11 needs P8** (reuses the FolderBus layout + registry); **P12 swaps P1's store in place** (everything behind `GraphStore` untouched); **P13 needs P8+P11** (identity keys the bus folder; retirement is a bus operation); **P14 hardens P8+P12** (the bus is the only thing that still needs to be on Drive).
 
 ---
@@ -308,6 +324,135 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 ---
 
 ## Handoff log (append-only · newest on top)
+
+### 06 Aug 2026 · agent:opus-p17a — P17b LANDED: the graph was rebuilt, and the plan for it was wrong
+
+**Did.** Dedup (WC-24). **The headline is that measuring reversed the plan.** Phase 17 §5 said to
+lower `similarity_ceiling` 0.86 → ~0.79 to merge duplicate activities. Before touching it I measured
+pairwise cosine over the live graph (`scripts/similarity_probe.py`, new): real duplicates score
+0.69–0.87 and **genuinely different work scores 0.78–0.87 — the same band.** The highest-scoring pair
+in the whole graph was `create-project-timeline` (pre-sales) vs `manage-project-timelines`
+(project-delivery) at **0.874**, which must never merge; `give-demo` (Discovery) vs `give-uat-demos`
+(UAT) at 0.808; the Delivery Specialist who *provides* an estimate vs the Customer who *approves* it
+at 0.785. **No threshold separates them**, and 0.86 was already a latent wrong merge.
+
+So the fix went the other way (ADRs #40/#41): the **stage and performing role** — which do separate
+every one of those pairs — now go to the adjudicator (`Resolver.node_context`, and
+`ingest._candidate_context` for the proposed node, read off its own extraction batch), and the
+ceiling went **UP to 0.90** as a backstop for restatements only. Plus an extractor anti-splitting
+rule, `cli rebuild-graph`, and the probe script so this gets re-measured rather than re-guessed.
+
+**Rebuild ran live** (52 answers, 6 logs incl. the archived retiree, ~40 min): Activity **62 → 49**,
+Role **14 → 11** (invented `deployment-approver`/`development-lead` gone), and **every activity now
+has a role and a stage** — the probe finds zero unplaced pairs, where the old graph was full of them.
+On the rebuilt graph, 0.90 merges nothing wrongly, 0.86 would merge 4 pairs wrongly, 0.78 would merge
+38. Also added **"Solutions Lead"** to the role registry at the owner's request (contract + PWA
+mirror + `seed-roles`, aliases kept narrow per ADR #33 — a bare "Lead" would swallow every
+"dev lead").
+
+**Next.**
+1. **A rebuild is owed** — WC-27 (below) is fixed in the prompt but the four lost Objectives only come
+   back on the next `rebuild-graph`. Fold it into whenever the next extractor change lands rather
+   than spending 40 minutes twice.
+2. **P17c** (denials + `known_facts`) is the last unbuilt piece and the one that needs a PWA deploy.
+3. **Residual dedup** is now a *retrieval* problem, not a prompt one: `create-user-story-documents`
+   vs `user-story-creation` are cross-answer forks the extractor cannot see. Candidate recall
+   (`retrieval_top_k`, alias generation) is the next lever, not the ceiling.
+
+**Gotchas.**
+- ⚠ **I caused a regression and it is instructive** (WC-27). The anti-splitting rule, placed right
+  after *"Prefer FEWER, well-formed nodes"*, took **Objectives 4 → 0 and ApprovalPoints 1 → 0** — real
+  content, and per ADR #32 the finding the engagement sells. The model generalised "don't split one
+  activity into three" into "emit less". Scoped and pinned by a test now. *A prompt rule is not a
+  local edit: the acceptance check has to count what you were NOT trying to change. An activity-count
+  check alone would have called this a clean win.*
+- **`rebuild-graph` is all-or-nothing and takes ~45s/answer.** A first attempt was killed ~14/52 in
+  and left a half-built graph; recovery was a folder copy. **Back up `brain/_graph` before running
+  it**, and run it in a terminal you control rather than as a background task.
+- **`seed-roles` re-creates every registry role**, so a rebuild resurrects any role you deleted by
+  hand (`role.finance`, `role.chief-operating-officer` came back). That is the design — never
+  hand-edit the graph — but delete from `contracts/roles.json` if you mean it permanently.
+- **The probe's "same place" bucket is a weak proxy**, not a duplicate list: `document-uat-feedback`
+  and `implement-uat-feedback` share a role and stage and are different work. Trust its *ceiling*
+  verdict (the "wrongly merges" column), not its pair classification.
+- **Cost model, since it came up:** per answer ≈ 1 extraction + 1 adjudication per proposed node, so
+  ingest is **linear in answers** and flat in graph size (`retrieval_top_k` caps what the adjudicator
+  sees). More roles is ~free. A normal `run-round` only ingests *new* logs, so routine cost tracks
+  how many people talked, not history; only `rebuild-graph` is O(everything ever). Ingestion is fully
+  sequential — parallelising extraction (independent per answer; resolve must stay ordered) is the
+  biggest available speedup.
+
+---
+
+### 06 Aug 2026 · agent:opus-p17a — P17a LANDED: the brief stopped lying about who people are, and stopped asking one question twelve times
+
+**Did.** The owner reported that two second-sessions felt redundant, keyword-targeted, and repetitive
+— *"users may get a little agitated"* — and asked whether the fix was prompting, context, or a better
+LLM. **It was none of those: it was the Session Brief.** Read both transcripts (`sample/`) against the
+briefs that produced them (`{bus}/participants/*/briefs/s_next.json`), the participant profiles, and
+the graph. Seven findings, written up in the new `docs/plan/phase-17-interview-fidelity.md`; four are
+now fixed (P17a), three are planned (P17b/P17c).
+
+1. **`persona_summary` claimed roles nobody declared** (WC-20/WC-R15, ADR #37). It read Role nodes off
+   the persona's *subgraph*, and mentioning a role is how provenance lands there. A Solution Architect
+   who declared `"Solution Architect"` was briefed as *"Business Analysis Specialist, Development
+   Lead, Quality Assurance Head, Solution Architect, Technical Specialist"*; a Business Analyst as six
+   roles including **`Customer`**. That sentence leads `briefDigest()` on **every turn**. Now declared
+   roles only; nothing declared ⇒ the `"As …,"` prefix is dropped rather than guessed.
+2. **Dual-hat copy fired on contribution** (WC-21/WC-R16, ADR #38). `dual_hat` read
+   `_role_owner_personas` (declarers **∪** contributors). Now `_declared_owners`, both sides.
+   **Routing is untouched** — same people, same threads, narrower wording.
+3. **The brief was one question repeated** (WC-22/WC-R17, ADR #39). 11 of 12 threads were
+   `next_handoff`, because `_FIELD_IMPACT` ranks by field and `threads[:max]` is therefore a
+   column-major read. New `_cluster()` groups by node, `_CLUSTER_MAX = 3`.
+4. **Role-inherited threads named the wrong role** (WC-23/WC-R18, ADR #37). `_role_threads` now stamps
+   the *inheriting* declared role over `Gap._attributed_role`.
+5. Two `SYSTEM_PROMPT` rules as second-line defence: a denial is final, and the identity block is the
+   only authority on which roles someone holds. `briefDigest()` explains the new grouping.
+
+**Verified** by regenerating both real briefs with `cli plan` (read-only, writes nothing to the bus):
+SA summary went from five roles to *"As Solution Architect"*; thread 1 went from *"You wear both hats
+here…"* to *"It sounds like Quality Assurance Head hands 'Assign Feedback to Developers' over to you —
+do you receive it?"*; `next_handoff` went from 11/12 threads to 2/12; distinct fields 1 → 4; shape from
+12 activities × 1 field to 4 activities × 2–3 fields. **244 brain + 75 pwa tests, ruff + tsc clean.**
+
+**Next.**
+1. **P17b — dedup + rebuild.** This is the biggest remaining source of redundancy and it is now
+   *confirmed*, not predicted: **52 activity nodes from three people**, `Code Review` existing four
+   times, `Discovery` four times, `Documentation` four times. Plan in phase-17 §5. ⚠ The cleanup is a
+   **rebuild from the Answer Logs**, not a merge pass — the logs are the immutable source of truth
+   (`answer-log.schema.json`) and all six exist, five under `participants/` plus the retired `fe69`'s
+   under `_archive/`. Write a narrow `cli rebuild-graph`; `reset-engagement` is the wrong tool because
+   it also deletes participant folders and `_retired.json`.
+2. **P17c — denials + memory.** Two contract changes, so brain and PWA ship together and phones need a
+   full reopen. Plan in phase-17 §6.
+3. **A live session can be run right now** — P17a is brain-side plus three prompt strings, and the
+   prompt changes need a `git push` (Pages auto-deploys) before a phone sees them.
+
+**Gotchas.**
+- **`_role_owner_personas` is generous ON PURPOSE and must never reach copy.** WC-R7 widened it so
+  routing never misses a real holder; reusing it to decide what to *say* is what produced WC-21. If you
+  widen a definition, audit every caller — the union had two callers with opposite cost profiles.
+- **Three tests encoded the bug and were updated, not deleted.** `test_crosspersona.py`'s
+  `_dual_hat_graph()` built its dual-hat case purely from contribution; it now pairs with
+  `_DUAL_HAT_DECLARED`. `test_role_scoping.py::test_declaring_both_sides_of_a_handoff_makes_it_a_dual_hat_question`
+  already used a declaration and passed untouched — that is the case that *should* survive.
+- **Clustering has its own failure mode:** it amplifies a node the person doesn't own (3 questions
+  instead of 1). `_CLUSTER_MAX` bounds it and the denial prompt rule tells the model to drop the group,
+  but the real fix is P17c. Risk **R1** in the phase doc.
+- **`reserve_threads` is now a set difference, not a slice.** Getting that wrong silently hides open
+  gaps from the operator; `test_threads_dropped_by_clustering_land_in_reserve` guards it.
+- **Ranking weights were deliberately left alone.** Changing selection *and* scoring in one go would
+  make the next live session unreadable as evidence. Same reason the probe budget was not touched —
+  see phase-17 §7 for the knobs and the order to try them in.
+- **On the model question:** `deepseek-v4-flash` behaved well in both transcripts — it acknowledged
+  corrections, apologised correctly, rephrased on request. Its one genuine failure (asking a third time
+  after two denials) is deleted at source by P17a. **If money goes to a model, spend it on extraction,
+  not the live turn** — that is where WC-24 and WC-25 are made, and `Extractor.extract(answer)` still
+  gets one answer's text and nothing else (WC-04, whose "does not affect interview quality" note is now
+  corrected in `ISSUES.md`).
+
+---
 
 ### 05 Aug 2026 · agent:sonnet-pwa-fix-3 — PWA polish only (no phase): nudge colors + a minimal "thinking" state
 

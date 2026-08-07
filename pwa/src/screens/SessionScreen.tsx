@@ -150,10 +150,26 @@ export function SessionScreen({
     });
     runnerRef.current = runner;
     micRef.current = new MicRecorder();
-    setMessages([{ who: "agent", text: runner.start() }]);
+    // P18: on a briefed session the opening question is written by the model, so it arrives
+    // asynchronously. Show the same "thinking" state every other turn already uses rather than an
+    // empty stage. `start()` swallows its own LLM failure and falls back to the brain's template,
+    // so this resolves either way — the `catch` only guards against the screen sticking in
+    // "thinking" if something upstream of that ever changes.
+    let cancelled = false;
+    setStatus("thinking");
+    void runner
+      .start()
+      .then((opener) => {
+        if (cancelled) return;
+        setMessages([{ who: "agent", text: opener }]);
+      })
+      .finally(() => {
+        if (!cancelled) setStatus("active");
+      });
     // Note: the opener isn't auto-spoken — browser autoplay needs a user gesture; replies (which
     // follow a tap) are spoken.
     return () => {
+      cancelled = true;
       micRef.current?.cancel();
       clearTimeout(reactionTimer.current);
       clearTimeout(gestureTimer.current);
@@ -395,7 +411,11 @@ export function SessionScreen({
           : micState === "transcribing"
             ? "Catching every word…"
             : status === "thinking"
-              ? "Thinking about what you said…"
+              ? // Nothing has been said yet on the opening turn (P18), so the usual copy would be
+                // a small lie about what the bot is doing.
+                messages.length === 0
+                ? "Getting your session ready…"
+                : "Thinking about what you said…"
               : " "}
       </p>
       {/* The just-answered question is stale while the bot is thinking — vanish it rather than

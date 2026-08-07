@@ -11,21 +11,35 @@
 
 ## Quick answer: "the conversation starts badly"
 
-Three things compose the very first sentence the person hears, in this order:
+**⚠ Changed in P18 — the two cases now work differently. Read which one you're in first.**
+
+- **First-ever session** (nothing in the graph) → the opener is **printed verbatim** from
+  `COLD_START_OPENERS` (§2), prefixed by `greet()` (§1). No model call. To change it, edit §2.
+- **Every later session** → the opener is **written by the model** (§3 + §5). The Planner's
+  `suggested_opener` is handed over as *scaffolding it is told to reword*, together with the
+  identity block and `WHAT WE ALREADY KNOW`. The template only reaches the screen as a **fallback**
+  when the model call fails. To change it, edit §3 or the scaffolding rules in §5 — editing the
+  Planner template alone will change what the model is shown, not what the person hears.
 
 ```
-greet()                +  opener
-"Hi Ajay — you're the     "Let's map your day from the very beginning: what's the
- Delivery Specialist."     first piece of work that lands on your plate…"
-   §1                          §2 (cold start)  or  §5 (warm, from the brief)
+cold   greet()                 +  COLD_START_OPENERS[n]      (verbatim, no model)
+       "Hi Ajay — you're the      "Think of one piece of work…"
+        Delivery Specialist."
+          §1                          §2
+
+warm   model, given: identity + known_facts + the top thread's suggested_opener
+       -> "Good to see you again, Kishor — what goes into the effort estimates?"
+          §3 (SYSTEM_PROMPT) · §5 (the scaffolding + its rules)
+       fallback if the call fails: greet() + suggested_opener, verbatim
 ```
 
-- **First-ever session** (nothing in the graph for them) → opener comes from
-  `COLD_START_OPENERS` (§2).
-- **Every later session** → opener comes from the **Session Brief**, i.e. the Planner's
-  `suggested_opener` for the highest-priority thread (§5).
+**Why this changed.** Until P18 the warm opener was the template, printed. The owner was opened with
+*"It sounds like Solution Architect hands 'Provide Technical Solutions and Effort Estimates' over to
+you"* — a graph **index label** read aloud mid-sentence (`Activity.canonical_name` is specced as an
+identifier, 2–4 words, written to be matched, not spoken). Worse than the wording: the template path
+never read the identity block or `WHAT WE ALREADY KNOW`, so the opening question was structurally
+incapable of knowing what the person had already told us. See WC-29.
 
-So: dislike the *first* session's start → edit §2. Dislike the *later* sessions' starts → edit §5.
 Dislike the *tone/behaviour throughout* → edit §3.
 
 ---
@@ -42,6 +56,13 @@ Current wording:
 - Warm: `Welcome back, {FirstName}. {opener}`
 
 Falls through to a bare opener when there's no declared identity.
+
+> **⚠ Since P18, `greet()` runs on two paths only: cold start, and the warm-session fallback.** On a
+> normal warm session the **model** writes the greeting, instructed by
+> `"Greet {FirstName} by first name once — warm, one short clause, not a speech."`
+> ([`prompts.ts` opening block](pwa/src/runner/prompts.ts)). So editing the `Welcome back,` string
+> changes what people see only when the LLM call has failed. Edit the opening-block instruction for
+> the normal case, and keep the two consistent — the fallback should not read as a different app.
 
 ---
 
@@ -140,6 +161,23 @@ Blocks it emits, in order:
 
 Deterministic scaffolding — the brain turns each detected gap into a thread with an opener the
 runner may reword. **This is the text driving sessions 2..n**, so it matters as much as §2.
+
+> **⚠ Since P18 nobody hears these verbatim — not even on turn one.** They are shown to the model as
+> *"machine-written scaffolding, NOT a script"*, and the same block carries two rules the templates
+> cannot follow themselves:
+>
+> 1. **Never read the quoted name aloud.** `'{name}'` is `Activity.canonical_name` — an index label
+>    ("a short normalized name (2-4 words)… the node's identifier", per the extractor prompt),
+>    written to be matched, not spoken. Read out it lands as a keyword wedged mid-sentence.
+> 2. **Never a yes/no question.** This one is load-bearing, not style: `ingest_answer` receives
+>    `raw_answer` and **never sees the question**, so everything the graph learns comes from what the
+>    person says. A tidier opener that invites *"yes"* is a strictly worse opener — better sentence,
+>    emptier graph. The clumsy templates below get this right by accident (*"…and what do you do with
+>    it next?"*); rewording must not lose it.
+>
+> So these still matter enormously — they set the **agenda and the intent** of every question — but
+> they are no longer the wording. They do reach the screen verbatim in one case: the fallback when
+> the opening model call fails.
 
 | What | Where |
 |---|---|

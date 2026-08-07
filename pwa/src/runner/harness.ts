@@ -109,7 +109,7 @@ async function main(): Promise<void> {
   stdout.write(`\n— Warp Compass live runner (model: ${llm.model}) —\n`);
   stdout.write(brief.cold_start ? "[cold start: empty brain]\n\n" : `[${brief.open_threads.length} open threads]\n\n`);
 
-  const opener = runner.start();
+  const opener = await runner.start();
   stdout.write(`AGENT: ${opener}\n`);
 
   // Non-interactive: feed scripted answers (one per line). Otherwise read from stdin.

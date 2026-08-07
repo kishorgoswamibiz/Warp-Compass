@@ -75,6 +75,13 @@ const decision = (d: Partial<LiveDecision>): LiveDecision => ({
   ...d,
 });
 
+/**
+ * P18: a BRIEFED session's opening question is written by the model, so `start()` costs one
+ * scripted decision before any answer is given. Cold starts still cost none — their openers are
+ * deterministic. Scripts below lead with this wherever the brief has threads.
+ */
+const OPENING = decision({ action: "opener", utterance: "Right — where does an order start for you?" });
+
 describe("cold start", () => {
   it("opens with a generic opener and records the first answer", async () => {
     const llm = new FakeLLMProvider([
@@ -82,7 +89,7 @@ describe("cold start", () => {
     ]);
     const runner = new Runner(coldBrief(), llm, clock);
 
-    const opener = runner.start();
+    const opener = await runner.start();
     expect(COLD_START_OPENERS).toContain(opener);
     expect(opener).toBe(COLD_START_OPENERS[0]);
 
@@ -97,16 +104,47 @@ describe("cold start", () => {
 });
 
 describe("seeded brief — opener leads with the top thread", () => {
-  it("starts on the highest-priority thread's suggested opener", () => {
-    const runner = new Runner(seededBrief(), new FakeLLMProvider([]), clock);
-    expect(runner.start()).toBe("Walk me through what kicks off 'Take order'.");
+  it("pins the top thread, then lets the model write the words (P18)", async () => {
+    const llm = new FakeLLMProvider([
+      decision({
+        action: "opener",
+        utterance: "Welcome back — what's the thing that sets an order off for you?",
+        active_thread_id: "t2", // the model names the WRONG thread; the runner must not follow it
+      }),
+    ]);
+    const runner = new Runner(seededBrief(), llm, clock);
+    const opener = await runner.start();
+
+    expect(opener).toBe("Welcome back — what's the thing that sets an order off for you?");
+    // The filing tag for the first answer is pinned BEFORE the call and survives the model
+    // disagreeing with it. Turn one is the only turn whose attribution is not the model's call.
     expect(runner.session.currentThreadId).toBe("t1");
+
+    const prompt = llm.calls[0].user;
+    expect(prompt).toContain("THIS IS THE OPENING TURN");
+    expect(prompt).toContain("Walk me through what kicks off 'Take order'."); // scaffolding, given
+    expect(prompt).toContain("only this one: t1"); // pinned, not chosen
+  });
+
+  it("falls back to the brain's template if the opening call fails", async () => {
+    // An empty FakeLLMProvider throws — the same shape as a network failure on the first turn.
+    // Before P18 `start()` could not fail at all, so this path is the whole safety of the change.
+    const runner = new Runner(seededBrief(), new FakeLLMProvider([]), clock);
+    expect(await runner.start()).toBe("Walk me through what kicks off 'Take order'.");
+    expect(runner.session.currentThreadId).toBe("t1");
+  });
+
+  it("costs no model call at all on a cold start", async () => {
+    const llm = new FakeLLMProvider([]);
+    await new Runner(coldBrief(), llm, clock).start();
+    expect(llm.calls).toHaveLength(0);
   });
 });
 
 describe("redirect on drift", () => {
   it("a tangent answer yields a redirect and is logged as free narration", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({
         classification: "tangent",
         action: "redirect",
@@ -115,7 +153,7 @@ describe("redirect on drift", () => {
       }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
     const { effectiveAction } = await runner.respond("Oh the canteen food here is terrible lately.");
     expect(effectiveAction).toBe("redirect");
     const entry = runner.log.build().entries[0];
@@ -127,13 +165,14 @@ describe("redirect on drift", () => {
 describe("probe budget", () => {
   it("probes a vague non-stage thread exactly once, then advances to the next thread", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       // 1st vague answer → the model probes
       decision({ classification: "vague", action: "probe", utterance: "Can you give a concrete example?", active_thread_id: "t1" }),
       // 2nd vague answer → the model WANTS to probe again, but the guard must stop it
       decision({ classification: "vague", action: "probe", utterance: "Still vague — try again?", active_thread_id: "t1" }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
 
     const first = await runner.respond("It depends, the usual stuff.");
     expect(first.effectiveAction).toBe("probe");
@@ -150,6 +189,7 @@ describe("probe budget", () => {
 describe("within-session reconciliation", () => {
   it("surfaces a contradiction as a reconcile action", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({ classification: "clear", action: "opener", utterance: "Got it.", active_thread_id: "t1", thread_complete: true }),
       decision({
         classification: "clear",
@@ -159,7 +199,7 @@ describe("within-session reconciliation", () => {
       }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
     await runner.respond("Orders come in by email.");
     const { effectiveAction } = await runner.respond("Actually customers mostly phone them in.");
     expect(effectiveAction).toBe("reconcile");
@@ -169,11 +209,12 @@ describe("within-session reconciliation", () => {
 describe("answer log contract", () => {
   it("emits a log that validates against contracts/answer-log.schema.json", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({ classification: "clear", action: "opener", utterance: "Who picks it up next?", active_thread_id: "t2", thread_complete: true }),
       decision({ classification: "clear", action: "close", utterance: "Thanks!", active_thread_id: null, thread_complete: true }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
     await runner.respond("It's triggered when the order email lands in my inbox.");
     await runner.respond("Warehouse picks it up to pack and ship.");
     runner.close();
@@ -196,6 +237,7 @@ describe("answer log contract", () => {
 describe("all threads run dry without ever probing (WC-R11)", () => {
   it("forces a close once the last thread completes via a non-probe action", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({
         classification: "clear",
         action: "opener", // the model itself decided to move on — no probing involved
@@ -212,7 +254,7 @@ describe("all threads run dry without ever probing (WC-R11)", () => {
       }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
 
     const first = await runner.respond("Whenever a customer calls in.");
     expect(first.effectiveAction).toBe("opener");
@@ -226,12 +268,13 @@ describe("all threads run dry without ever probing (WC-R11)", () => {
 
   it("forces the close only once, so it doesn't repeat if the person keeps talking", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({ action: "opener", utterance: "…", active_thread_id: "t2", thread_complete: true }),
       decision({ action: "acknowledge", utterance: "Got it!", active_thread_id: null, thread_complete: true }),
       decision({ action: "acknowledge", utterance: "Noted, thanks for adding that." }),
     ]);
     const runner = new Runner(seededBrief(), llm, clock);
-    runner.start();
+    await runner.start();
     await runner.respond("Whenever a customer calls in.");
     const closed = await runner.respond("Warehouse picks it up.");
     expect(closed.effectiveAction).toBe("close");
@@ -246,7 +289,7 @@ describe("all threads run dry without ever probing (WC-R11)", () => {
       decision({ classification: "clear", action: "acknowledge", utterance: "Tell me more." }),
     ]);
     const runner = new Runner(coldBrief(), llm, clock);
-    runner.start();
+    await runner.start();
     const { effectiveAction } = await runner.respond("I do all sorts of things.");
     expect(effectiveAction).toBe("acknowledge"); // NOT force-closed — cold start has no threads to run dry
   });
@@ -259,9 +302,9 @@ describe("all threads run dry without ever probing (WC-R11)", () => {
 const identity = { display_name: "Rahul Mehta", role_title: "Business Analyst" };
 
 describe("declared identity (P13)", () => {
-  it("greets by first name and SKIPS the 'tell me about your role' opener", () => {
+  it("greets by first name and SKIPS the 'tell me about your role' opener", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
-    const opener = runner.start();
+    const opener = await runner.start();
 
     expect(opener).toContain("Hi Rahul");
     expect(opener).toContain("Business Analyst");
@@ -270,19 +313,39 @@ describe("declared identity (P13)", () => {
     expect(opener).toContain(COLD_START_OPENERS[1]); // straight to mapping the lifecycle
   });
 
-  it("never reaches the role opener on later cold-start turns either", () => {
+  it("never reaches the role opener on later cold-start turns either", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
-    const seen = [runner.start()];
+    const seen = [await runner.start()];
     for (let i = 0; i < COLD_START_OPENERS.length + 2; i += 1) {
       seen.push(runner.session.nextColdStartOpener());
     }
     expect(seen.join(" | ")).not.toContain(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
   });
 
-  it("welcomes a returning person back before the top thread's opener", () => {
+  it("hands the model the name and the memory, and lets IT write the welcome (P18)", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ action: "opener", utterance: "Good to see you again, Rahul — what starts an order off?" }),
+    ]);
+    const runner = new Runner(
+      { ...seededBrief(), known_facts: ["You do 'Take order' (in Pre-sales) — produces the order."] },
+      llm,
+      clock,
+      { identity },
+    );
+    expect(await runner.start()).toBe("Good to see you again, Rahul — what starts an order off?");
+
+    // The whole point of routing turn one through the model: the blocks it could never see before.
+    const prompt = llm.calls[0].user;
+    expect(prompt).toContain("WHO YOU'RE TALKING TO");
+    expect(prompt).toContain("WHAT WE ALREADY KNOW");
+    expect(prompt).toContain("Greet Rahul by first name once");
+  });
+
+  it("still welcomes them by name from the template when the call fails", async () => {
     const runner = new Runner(seededBrief(), new FakeLLMProvider([]), clock, { identity });
-    const opener = runner.start();
-    expect(opener).toBe("Welcome back, Rahul. Walk me through what kicks off 'Take order'.");
+    expect(await runner.start()).toBe(
+      "Welcome back, Rahul. Walk me through what kicks off 'Take order'.",
+    );
     expect(runner.session.currentThreadId).toBe("t1");
   });
 
@@ -291,7 +354,7 @@ describe("declared identity (P13)", () => {
       decision({ classification: "clear", action: "opener", utterance: "And then?" }),
     ]);
     const runner = new Runner(coldBrief(), llm, clock, { identity });
-    runner.start();
+    await runner.start();
     await runner.respond("I take the order.");
 
     const prompt = llm.calls[0].user;
@@ -301,9 +364,9 @@ describe("declared identity (P13)", () => {
     expect(prompt).toContain("Do NOT ask for their name or role");
   });
 
-  it("without an identity, behaviour is byte-identical to pre-P13", () => {
+  it("without an identity, behaviour is byte-identical to pre-P13", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock);
-    expect(runner.start()).toBe(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
+    expect(await runner.start()).toBe(COLD_START_OPENERS[IDENTITY_OPENER_INDEX]);
   });
 });
 
@@ -318,11 +381,11 @@ const dualHatted = {
 };
 
 describe("multi-role identity (P15a)", () => {
-  it("greets someone wearing two hats as a person would, not with a slash", () => {
+  it("greets someone wearing two hats as a person would, not with a slash", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, {
       identity: dualHatted,
     });
-    const opener = runner.start();
+    const opener = await runner.start();
     expect(opener).toContain(
       "you're the Delivery Specialist and Account Management Specialist",
     );
@@ -334,7 +397,7 @@ describe("multi-role identity (P15a)", () => {
       decision({ classification: "clear", action: "opener", utterance: "And then?" }),
     ]);
     const runner = new Runner(coldBrief(), llm, clock, { identity: dualHatted });
-    runner.start();
+    await runner.start();
     await runner.respond("I run delivery, and I also handle two accounts.");
 
     const prompt = llm.calls[0].user;
@@ -350,7 +413,7 @@ describe("multi-role identity (P15a)", () => {
       identity: dualHatted,
       seedIdentity: true,
     });
-    runner.start();
+    await runner.start();
     await runner.respond("A lead lands from marketing.");
 
     const seed = runner.log.build().entries[0];
@@ -359,11 +422,11 @@ describe("multi-role identity (P15a)", () => {
     );
   });
 
-  it("reads a P13-era identity (joined string, no array) forward", () => {
+  it("reads a P13-era identity (joined string, no array) forward", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, {
       identity: { display_name: "Ajay", role_title: "Delivery Specialist / Project Manager" },
     });
-    expect(runner.start()).toContain("you're the Delivery Specialist and Project Manager");
+    expect(await runner.start()).toContain("you're the Delivery Specialist and Project Manager");
   });
 });
 
@@ -373,7 +436,7 @@ describe("identity seed entry (P13 §4.1)", () => {
       decision({ classification: "clear", action: "opener", utterance: "What starts your day?" }),
     ]);
     const runner = new Runner(coldBrief(), llm, clock, { identity, seedIdentity: true });
-    runner.start();
+    await runner.start();
     await runner.respond("Orders land in my inbox each morning.");
 
     const log = runner.log.build();
@@ -396,16 +459,16 @@ describe("identity seed entry (P13 §4.1)", () => {
       decision({ classification: "clear", action: "opener", utterance: "And then?" }),
     ]);
     const runner = new Runner(coldBrief(), llm, clock, { identity, seedIdentity: true });
-    runner.start();
+    await runner.start();
     await runner.respond("Orders land in my inbox.");
 
     expect(runner.log.count()).toBe(2); // what goes to the brain
     expect(runner.log.answerCount()).toBe(1); // what the UI reports
   });
 
-  it("is omitted when the device has already seeded it", () => {
+  it("is omitted when the device has already seeded it", async () => {
     const runner = new Runner(coldBrief(), new FakeLLMProvider([]), clock, { identity });
-    runner.start();
+    await runner.start();
     expect(runner.log.build().entries).toHaveLength(0);
   });
 });
@@ -443,8 +506,9 @@ describe("probe budget on a lifecycle-stage thread (P15b §8.5)", () => {
       ],
     };
     // Four vague answers: the model wants to probe every time. Three must land, the fourth must not.
-    const llm = new FakeLLMProvider(
-      Array.from({ length: 4 }, (_, i) =>
+    const llm = new FakeLLMProvider([
+      OPENING, // the briefed session's opening turn (P18)
+      ...Array.from({ length: 4 }, (_, i) =>
         decision({
           classification: "vague",
           action: "probe",
@@ -452,9 +516,9 @@ describe("probe budget on a lifecycle-stage thread (P15b §8.5)", () => {
           active_thread_id: stageThread,
         }),
       ),
-    );
+    ]);
     const runner = new Runner(brief, llm, clock);
-    runner.start();
+    await runner.start();
 
     for (let i = 1; i <= 3; i += 1) {
       const turn = await runner.respond("It depends.");
@@ -486,6 +550,7 @@ describe("probe budget on a lifecycle-stage thread (P15b §8.5)", () => {
       ],
     };
     const llm = new FakeLLMProvider([
+      OPENING, // the briefed session's opening turn (P18)
       decision({
         classification: "vague",
         action: "probe",
@@ -494,7 +559,7 @@ describe("probe budget on a lifecycle-stage thread (P15b §8.5)", () => {
       }),
     ]);
     const runner = new Runner(brief, llm, clock);
-    runner.start();
+    await runner.start();
     await runner.respond("It varies.");
 
     // Probed once of three — the prompt must NOT yet tell the model to stop probing it.
@@ -582,5 +647,74 @@ describe("a denial is final, and roles are never assumed (P17a)", () => {
 
     expect(prompt).toContain("SAME piece of work are grouped on purpose");
     expect(prompt).toContain("skip the whole group");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P18 / WC-29 — the opening question is written, not printed.
+//
+// The owner was opened with *"It sounds like Solution Architect hands 'Provide Technical Solutions
+// and Effort Estimates' over to you"* — the brain's template, verbatim, with a graph index label
+// read aloud mid-sentence. `Runner.start()` never called the model, so the one turn that sets the
+// tone was the one turn no prompt rule could reach.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("the opener is scaffolding, and the model is told so (P18)", () => {
+  const renderThreads = () =>
+    buildUserPrompt({
+      brief: seededBrief(),
+      transcript: [],
+      covered: [],
+      currentThreadId: "t1",
+      probedThreadIds: [],
+      closing: false,
+    });
+
+  it("tells the model the quoted name is a label, not something to say aloud", () => {
+    const prompt = renderThreads();
+    expect(prompt).toContain("machine-written scaffolding");
+    expect(prompt).toContain("never read one aloud");
+  });
+
+  it("forbids a yes/no opener, because the graph is built from the ANSWER alone", () => {
+    // Not a style rule. `ingest_answer` receives `raw_answer` and never sees the question, so a
+    // tidier opener that invites "yes" is a strictly worse opener: better sentence, emptier graph.
+    expect(renderThreads()).toContain("never a yes/no question");
+    expect(SYSTEM_PROMPT).toContain('never a question answerable with "yes" or "no"');
+  });
+
+  it("marks the opening turn and names the pinned thread", () => {
+    const prompt = buildUserPrompt({
+      brief: seededBrief(),
+      transcript: [],
+      covered: [],
+      currentThreadId: "t1",
+      probedThreadIds: [],
+      closing: false,
+      opening: true,
+    });
+    expect(prompt).toContain("THIS IS THE OPENING TURN");
+    expect(prompt).toContain("only this one: t1");
+    expect(prompt).toContain("under 40 words");
+  });
+
+  it("says nothing about an opening turn on any later turn", () => {
+    expect(renderThreads()).not.toContain("THIS IS THE OPENING TURN");
+  });
+
+  it("records the model's opener as the question the first answer replies to", async () => {
+    const llm = new FakeLLMProvider([
+      decision({ action: "opener", utterance: "What sets an order off for you?" }),
+      decision({ action: "probe", utterance: "Anything else?", active_thread_id: "t1" }),
+    ]);
+    const runner = new Runner(seededBrief(), llm, clock);
+    await runner.start();
+    await runner.respond("An email from the customer.");
+
+    const [entry] = runner.log.build().entries;
+    // The Answer Log pairs each answer with what was actually said to elicit it — so the model's
+    // words, not the template's, and the filing tag is still the pinned thread.
+    expect(entry.agent_utterance).toBe("What sets an order off for you?");
+    expect(entry.thread_id).toBe("t1");
   });
 });

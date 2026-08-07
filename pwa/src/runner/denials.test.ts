@@ -31,6 +31,9 @@ const decision = (d: Partial<LiveDecision>): LiveDecision => ({
   ...d,
 });
 
+/** P18: every brief here has threads, so `start()` spends one scripted decision on the opener. */
+const OPENING = decision({ action: "opener", utterance: "Welcome back — where shall we pick up?" });
+
 function brief(extra: Partial<SessionBrief> = {}): SessionBrief {
   return {
     session_id: "s_p17c",
@@ -60,6 +63,7 @@ function brief(extra: Partial<SessionBrief> = {}): SessionBrief {
 describe("WC-25 — a refusal reaches the Answer Log", () => {
   it("writes the classification onto the entry, paired with the thread it refuses", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({
         classification: "not_mine",
         action: "opener",
@@ -68,7 +72,7 @@ describe("WC-25 — a refusal reaches the Answer Log", () => {
       }),
     ]);
     const runner = new Runner(brief(), llm, clock);
-    runner.start();
+    await runner.start();
 
     await runner.respond("The project timeline is not my job.");
 
@@ -80,11 +84,12 @@ describe("WC-25 — a refusal reaches the Answer Log", () => {
 
   it("a log carrying a classification still validates against the contract", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({ classification: "dont_know", action: "opener", utterance: "No problem." }),
       decision({ classification: "clear", action: "opener", utterance: "Got it." }),
     ]);
     const runner = new Runner(brief(), llm, clock, { participantId: "p_1" });
-    runner.start();
+    await runner.start();
     await runner.respond("No idea, sorry.");
     await runner.respond("It starts when the client signs.");
 
@@ -106,10 +111,11 @@ describe("WC-25 — a refusal reaches the Answer Log", () => {
 
   it("a tangent carries no thread, so drifting can never be read as refusing", async () => {
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({ classification: "tangent", action: "redirect", utterance: "Back to it —" }),
     ]);
     const runner = new Runner(brief(), llm, clock);
-    runner.start();
+    await runner.start();
 
     await runner.respond("Anyway, the canteen food is terrible.");
 
@@ -124,6 +130,7 @@ describe("WC-25 — a refusal closes the thread in-session too", () => {
     // `thread_complete: false` is the realistic answer here — the question was not answered, it was
     // refused. Before P17c that left the thread current and re-askable.
     const llm = new FakeLLMProvider([
+      OPENING,
       decision({
         classification: "not_mine",
         action: "opener",
@@ -133,7 +140,7 @@ describe("WC-25 — a refusal closes the thread in-session too", () => {
       }),
     ]);
     const runner = new Runner(brief(), llm, clock);
-    runner.start();
+    await runner.start();
 
     await runner.respond("I told you, the timeline is not my job.");
 

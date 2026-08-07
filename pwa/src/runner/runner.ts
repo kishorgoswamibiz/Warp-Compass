@@ -122,13 +122,23 @@ export class Runner {
   }
 
   /**
-   * The opening utterance. Deterministic: a generic opener on a cold start, otherwise the
-   * top-priority thread's suggested opener (scaffolding the runner may reword — not rails).
+   * The opening utterance.
    *
-   * With a declared identity (P13) the opener is prefixed with a greeting and the "tell me about
-   * your role" cold-start question is dropped entirely — this is the turn P13 exists to save.
+   * **Cold start stays deterministic** — `COLD_START_OPENERS` are already written for the ear, there
+   * is no brief to be context-aware about, and skipping the call keeps a first-ever session instant.
+   *
+   * **A briefed session asks the model**, exactly like every other turn. Until P18 this printed the
+   * brain's template verbatim, which made the one turn that sets the tone the one turn the model
+   * never touched: the owner was opened with *"It sounds like Solution Architect hands 'Provide
+   * Technical Solutions and Effort Estimates' over to you"* — a graph index label read aloud
+   * mid-sentence. Worse than the wording, the template path never reads `WHO YOU'RE TALKING TO` or
+   * `WHAT WE ALREADY KNOW`, so the opening question was structurally incapable of knowing what the
+   * person had already told us (WC-26's block existed and could not reach turn one).
+   *
+   * With a declared identity (P13) the "tell me about your role" cold-start question is dropped
+   * entirely — this is the turn P13 exists to save.
    */
-  start(): string {
+  async start(): Promise<string> {
     const s = this.session;
     if (s.brief.cold_start || s.brief.open_threads.length === 0) {
       s.currentThreadId = null;
@@ -136,13 +146,43 @@ export class Runner {
       return s.lastAgentUtterance;
     }
     const top = s.nextThread();
+    // Pin the thread BEFORE the call, and keep it whatever the model reports (`opening` tells the
+    // prompt it is already decided). The first answer is filed against `currentThreadId` — see
+    // `respond` — so routing the opener through the model changes only the WORDS, never where the
+    // answer lands. That makes turn one the one turn whose attribution is not the model's call,
+    // where turns 2..n already trust `decision.active_thread_id`.
     s.currentThreadId = top ? top.id : null;
-    const opener = top?.suggested_opener ?? top?.goal ?? s.nextColdStartOpener();
-    s.lastAgentUtterance = this.greet(opener, false);
+    const template = this.greet(
+      top?.suggested_opener ?? top?.goal ?? s.nextColdStartOpener(),
+      false,
+    );
+    s.lastAgentUtterance = await this.openingUtterance(template);
     return s.lastAgentUtterance;
   }
 
-  /** Prefix an opener with a first-name greeting when we know who this is. */
+  /**
+   * The model's opening words, falling back to the brain's template if the call fails.
+   *
+   * The fallback is load-bearing, not defensive padding: before P18 `start()` could not fail at all,
+   * and this change introduces the first way for a session to die before its first question. A stiff
+   * opening question is a small cost; a blank screen is the session.
+   */
+  private async openingUtterance(fallback: string): Promise<string> {
+    try {
+      const decision = await this.decide(false, true);
+      return decision.utterance.trim() || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  /**
+   * Prefix an opener with a first-name greeting when we know who this is.
+   *
+   * Since P18 this runs on two paths only: a cold start, and the warm-session fallback. On a normal
+   * warm session the model writes its own greeting, instructed by the prompt's opening block — so
+   * keep the two readings close, or a failed call reads as a different app. (`PROMPTS.md` §1.)
+   */
   private greet(opener: string, cold: boolean): string {
     if (!this.identity) return opener;
     const who = firstName(this.identity);
@@ -264,7 +304,7 @@ export class Runner {
   }
 
   /** One live model call → a validated `LiveDecision`. */
-  private async decide(closing: boolean): Promise<LiveDecision> {
+  private async decide(closing: boolean, opening = false): Promise<LiveDecision> {
     const s = this.session;
     const user = buildUserPrompt({
       brief: s.brief,
@@ -274,6 +314,7 @@ export class Runner {
       currentThreadId: s.currentThreadId,
       probedThreadIds: s.probedIds(),
       closing,
+      opening,
     });
     const raw = await this.llm.completeJSON(SYSTEM_PROMPT, user, { temperature: 0.3 });
     if (!isLiveDecision(raw)) {

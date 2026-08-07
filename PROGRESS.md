@@ -342,6 +342,55 @@ _All build phases (P0–P10) are DONE; P7 voice verified live._ One owner step +
 
 ## Handoff log (append-only · newest on top)
 
+### 07 Aug 2026 · agent:opus-p18 — P18: the opening question is written, not printed (WC-29) + WC-04 researched
+
+**Did.** Two things, only one of which is code.
+
+**P18 / WC-29 — the warm opener now goes through the model (ADR #45).** The owner tested and was
+opened with *"Welcome back Kishor. It sounds like Solution Architect hands 'Provide Technical
+Solutions and Effort Estimates' over to you…"*. The reported fault was the wording; the real fault
+was underneath it. `Runner.start()` never called the model at all — it printed
+`suggested_opener` verbatim — so `WHO YOU'RE TALKING TO`, `WHAT WE ALREADY KNOW` (ADR #44, built the
+previous day for exactly this complaint) and the covered list were **structurally unreachable on the
+one turn that sets the tone**. No brief content could have fixed it. Now `start()` is `async` and
+uses the same `decide()` path as every other turn, with an `opening` block in the user prompt. The
+brief's opener is handed over labelled *"machine-written scaffolding, NOT a script"* plus two rules
+it cannot follow itself: never read the quoted `canonical_name` aloud (it is an index label — the
+extractor prompt specs it as *"the node's identifier"*), and **never a yes/no question**. That second
+rule is load-bearing, not style: `ingest_answer` takes `raw_answer` and never sees the question, so a
+tidier opener inviting *"yes"* is a strictly worse opener. **The thread is pinned before the call and
+the model's `active_thread_id` is ignored this turn**, so filing is untouched and turn one is now the
+only turn whose attribution is deterministic. Cold start stays a printed constant. An LLM failure
+falls back to `greet()` + template — `start()` could not fail before, so that path is the whole
+safety of the change. UI shows the existing thinking state while it generates (*"Getting your session
+ready…"*; the usual copy would have been a lie, since nothing has been said yet).
+
+**WC-04 researched, not built** — `docs/plan/wc-04-speaker-attribution.md`. The owner asked for the
+diagnosis to be preserved before deciding. Headline: a probe of the live graph found **20 of 21
+activities already carry a performing role**, so the symptom WC-04 predicts is not what is happening.
+What *is* happening is worse — since P17b the adjudicator weighs `[performed by …; in stage …]`
+heavily, so imprecise attribution now **forks nodes**: `act.discovery-work` and
+`act.detailed-project-discovery` are one activity in two nodes, same stage, differing only in
+performer set. **WC-04 feeds WC-24.** Severity raised Medium → High. The doc also carries a
+deterministic layer the phase-16 plan lacks, an archived-profile trap in the rebuild path, a live
+`DUPLICATED_WORK` bug, and an A/B-rebuild measurement plan.
+
+**Next.** (1) **Deploy and retest** — P18 is the second change in a row that needs the phone fully
+reopened (cached service worker), and WC-25's brain half is *still* inert until one session writes a
+`classification`: no Answer Log on disk carries that field yet. Check a warm session's first question
+reads like a person wrote it, and that it does not re-ask anything in `known_facts`. (2) **Decide
+WC-04's open question** (§8 of the doc: ambiguous dual-hat work → both hats or neither) before any of
+it is built. (3) A rebuild is still owed for WC-27's four lost Objectives.
+
+**Gotchas.** (1) `Runner.start()` is now `async` — three call sites (`SessionScreen.tsx`,
+`harness.ts`, tests) and **every warm-brief test now spends one scripted `FakeLLMProvider` decision
+on the opener**; the `OPENING` const at the top of `runner.test.ts` / `denials.test.ts` is what pays
+for it. A warm test with an exhausted script does not fail loudly — it silently exercises the
+*fallback* path and asserts the old template string, which is exactly how this change could rot. Two
+tests pin the fallback deliberately so that path stays honest. (2) `PROMPTS.md` §5 openers are no
+longer what anyone hears; edit §3 and the scaffolding rules for the warm case. (3) Suites green:
+pwa 93, typecheck and `npm run build` clean. Brain untouched.
+
 ### 06 Aug 2026 · agent:opus-p17c — P17c: refusals stick, and the brief remembers (WC-25/WC-26)
 
 **Did.** The last two open findings from the tester sessions, both contract changes, both planes.

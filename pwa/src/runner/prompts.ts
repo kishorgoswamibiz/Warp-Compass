@@ -98,7 +98,7 @@ Each turn you do two things:
    - "dont_know": they don't know THIS detail, but the work is still theirs ("no idea what triggers it").
    - "not_mine": this piece of work is NOT theirs — they don't do it, it belongs to another role, they aren't the right person ("the project timeline is not my job", "QA handles that"). Choose this over "dont_know" whenever they are disowning the WORK rather than lacking a detail. It is the strongest signal you can send: it stops every remaining question about that piece of work, this session and in every future one. Use it exactly when they mean it, and never as a polite reading of a vague answer.
 2) Decide the next ACTION and write the next UTTERANCE:
-   - "opener": open the next thread (or, with no threads, a generic discovery question). Lead with the brief's highest-priority uncovered thread.
+   - "opener": open the next thread (or, with no threads, a generic discovery question). Lead with the brief's highest-priority uncovered thread. Ask something they can only answer by DESCRIBING it — never a question answerable with "yes" or "no". A one-word answer teaches us nothing, because everything we learn comes from what they actually say.
    - "redirect": they drifted — steer back to the current thread's intent, in your own words, gently.
    - "probe": ONE short follow-up to sharpen a vague answer. Do not probe any thread listed as already probed. On a lifecycle-stage thread you may probe a few times as you walk the stage; elsewhere probe once, then move on.
    - "reconcile": you noticed this answer contradicts something earlier in THIS session — name both, ask which is right.
@@ -131,6 +131,15 @@ export interface UserPromptInput {
   probedThreadIds: string[];
   /** True on the final turn so the model produces a graceful close. */
   closing: boolean;
+  /**
+   * True for the session's FIRST utterance, where there is no answer to classify and the runner
+   * has already pinned which thread to open (P18 / WC-29).
+   *
+   * Before this, `Runner.start()` printed the brain's template verbatim — so the one turn that sets
+   * the tone was the one turn the model never touched, and the identity block, `known_facts` and
+   * the covered list were all invisible to it.
+   */
+  opening?: boolean;
 }
 
 function briefDigest(brief: SessionBrief): string {
@@ -148,6 +157,26 @@ function briefDigest(brief: SessionBrief): string {
       "SAME piece of work are grouped on purpose — walk it as one topic. If they say that work " +
       "isn't theirs, skip the whole group:",
   );
+  // Two rules the suggested openers cannot follow themselves, because the brain writes them by
+  // filling blanks in a template (`planner._opener_and_followups`).
+  //
+  // (1) The quoted name is `Activity.canonical_name` — an INDEX LABEL, specced in the extractor
+  //     prompt as "a short normalized name (2-4 words)... the node's identifier". It exists to be
+  //     matched, not spoken, and read aloud it lands as a keyword wedged mid-sentence:
+  //     *"It sounds like Solution Architect hands 'Provide Technical Solutions and Effort
+  //     Estimates' over to you"*. Reported by the owner from live testing, 06 Aug 2026.
+  //
+  // (2) The no-yes/no rule is load-bearing, not style. The brain builds the graph from the ANSWER
+  //     TEXT ALONE — `ingest_answer` receives `raw_answer` and never sees the question. So a
+  //     tidier opener that invites "yes" is a WORSE opener: better sentence, emptier graph. The
+  //     clumsy templates get this right by accident ("...and what do you do with it next?"), and
+  //     rewording must not lose it.
+  lines.push(
+    "Every suggested opener below is machine-written scaffolding, NOT a script. Reword it into " +
+      "plain spoken language. The quoted name in it is a database label — never read one aloud; " +
+      "say the work the way a colleague would refer to it. And ask something they can only answer " +
+      "by describing it, never a yes/no question.",
+  );
   for (const t of brief.open_threads) {
     lines.push(
       `  [${t.id}] (priority ${t.priority}) goal: ${t.goal}` +
@@ -163,7 +192,8 @@ function briefDigest(brief: SessionBrief): string {
 
 /** Render the per-turn user message: the brief digest + the running transcript + control flags. */
 export function buildUserPrompt(input: UserPromptInput): string {
-  const { brief, identity, transcript, covered, currentThreadId, probedThreadIds, closing } = input;
+  const { brief, identity, transcript, covered, currentThreadId, probedThreadIds, closing, opening } =
+    input;
   const parts: string[] = [];
   // Repeated EVERY turn, not just the opener: the "don't re-ask" rule has to survive the person
   // circling back to introductions twenty turns in.
@@ -205,6 +235,32 @@ export function buildUserPrompt(input: UserPromptInput): string {
   if (closing) {
     parts.push("");
     parts.push("The session is ENDING now — produce a graceful close (action: close).");
+  }
+  if (opening) {
+    // The thread is pinned by the runner before this call, so the model chooses the WORDS and
+    // nothing else. `active_thread_id` is ignored on this turn (`Runner.start`), which is what
+    // makes the opening turn safer than every later one rather than riskier.
+    parts.push("");
+    parts.push("=== THIS IS THE OPENING TURN ===");
+    parts.push(
+      "Nothing has been said yet. There is no answer to classify — set \"classification\":\"clear\"; " +
+        "it is ignored this turn.",
+    );
+    if (identity) {
+      parts.push(
+        `Greet ${firstName(identity)} by first name once — warm, one short clause, not a speech.`,
+      );
+    }
+    parts.push(
+      currentThreadId
+        ? `Then open this thread, and only this one: ${currentThreadId}. Set "action":"opener" and "active_thread_id" to exactly that id.`
+        : 'Then open with a generic discovery question. Set "action":"opener" and "active_thread_id":null.',
+    );
+    parts.push(
+      "Anything in WHAT WE ALREADY KNOW is memory — opening by asking for something we were " +
+        "already told is the worst possible first impression.",
+    );
+    parts.push("Greeting and question together: one question, under 40 words.");
   }
   parts.push("");
   parts.push("Return the JSON decision for your NEXT utterance.");

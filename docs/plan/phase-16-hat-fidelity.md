@@ -12,6 +12,14 @@
 > **Read §3 before §4.** The question looks like one problem and is actually five separable ones with
 > different best answers. Deciding them as a bundle is how this gets over-built.
 >
+> ⚠ **P16b (§4 P2) has been re-researched — read `wc-04-speaker-attribution.md` first (07 Aug 2026).**
+> This plan costs attribution as **Medium, "the deliverable's SOP sections"**. That was correct on
+> 04 Aug and is **out of date**: P17b (06 Aug) started feeding the performing role to the resolution
+> adjudicator, so imprecise attribution now **forks nodes** — it is a contributing cause of WC-24,
+> not a display concern. The newer doc also corrects §2 Finding 1's predicted symptom (20 of 21 live
+> activities *do* carry a performer), adds a deterministic layer this plan lacks, and flags a trap in
+> the rebuild path. §4 P2's option table and §9 R2/R3 still stand.
+>
 > Depends on: P15a (multi-select `role_titles`), P15b (`Role.reports_to` scoring), P15c
 > (`alignment.derive_altitudes`, `_persona_role`). All shipped.
 
